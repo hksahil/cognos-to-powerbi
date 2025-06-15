@@ -2,3 +2,6 @@
 /.idea
 /.venv
 /.vscode
+/dump
+column_mappings.json
+tab-sql.json
