@@ -211,10 +211,12 @@ def main():
     if 'dax_expressions' not in st.session_state:
         st.session_state['dax_expressions'] = {}
     
-    # Load column mappings into session state if not already loaded
-    # This ensures it's loaded once per session or when the app starts
     if 'column_mappings' not in st.session_state:
         st.session_state['column_mappings'] = load_column_mappings()
+    
+    # Re-introduce mapping_results for the dedicated PBI Mapping tab
+    if 'mapping_results' not in st.session_state:
+        st.session_state['mapping_results'] = None # Initialize as None or {}
     
     st.title("SQL to Power BI Column Mapper")
     st.markdown("""
@@ -223,13 +225,10 @@ def main():
     
     with st.sidebar:
         st.header("Settings")
-        # Use the session state key 'column_mappings'
         current_mappings_in_session = st.session_state.get('column_mappings')
         
-        # Check if current_mappings_in_session is a dictionary and has the 'db_to_powerbi' key
         if isinstance(current_mappings_in_session, dict) and "db_to_powerbi" in current_mappings_in_session:
             st.info(f"✅ Using mapping file: {MAPPING_FILE_PATH}")
-            # This line should now report the correct number
             st.info(f"Contains {len(current_mappings_in_session.get('db_to_powerbi', {}))} database columns")
         else:
             st.warning(f"⚠️ Could not load or parse mapping file correctly from {MAPPING_FILE_PATH}. Check console for errors.")
@@ -255,6 +254,7 @@ def main():
             st.session_state['lineage_data'] = None
             st.session_state['all_types'] = []
             st.session_state['dax_expressions'] = {}
+            st.session_state['mapping_results'] = None # Clear mapping results too
             st.rerun()
     
     if analyze_button and sql_query.strip():
@@ -266,6 +266,36 @@ def main():
                 if st.session_state['lineage_data']:
                     df = pd.DataFrame(st.session_state['lineage_data'])
                     st.session_state['all_types'] = sorted(df['type'].unique().tolist())
+
+                    # Prepare data for the PBI Mapping tab
+                    if st.session_state.get('column_mappings'):
+                        mapping_results_for_tab = {}
+                        for item in st.session_state['lineage_data']:
+                            sql_output_column_name = item['column']
+                            base_columns_for_item = item.get('base_columns', [])
+                            
+                            current_sql_col_mappings = []
+                            has_any_pbi_mapping_for_this_sql_col = False
+
+                            for base_col in base_columns_for_item:
+                                pbi_matches = find_matching_powerbi_columns(base_col, st.session_state['column_mappings'])
+                                if pbi_matches:
+                                    has_any_pbi_mapping_for_this_sql_col = True
+                                current_sql_col_mappings.append({
+                                    "original_base_col": base_col,
+                                    "normalized_base_col": normalize_column_identifier(base_col),
+                                    "pbi_matches": pbi_matches
+                                })
+                            
+                            mapping_results_for_tab[sql_output_column_name] = {
+                                "type": item['type'],
+                                "base_column_mappings": current_sql_col_mappings,
+                                "is_mapped_overall": has_any_pbi_mapping_for_this_sql_col
+                            }
+                        st.session_state['mapping_results'] = mapping_results_for_tab
+                    else:
+                        st.session_state['mapping_results'] = None # No mappings if mapping file not loaded
+
         except Exception as e:
             st.error(f"Error analyzing query: {str(e)}")
             st.exception(e)
@@ -275,10 +305,10 @@ def main():
         
         df = pd.DataFrame(st.session_state['lineage_data'])
         
-        # Adjusted to 3 tabs
-        tab1, tab2, tab3 = st.tabs(["Table View", "Detail View", "Raw JSON"])
+        # Adjusted to 4 tabs
+        tab1, tab2, tab3, tab4 = st.tabs(["Table View", "Detail View", "PBI Mapping", "Raw JSON"])
         
-        with tab1:
+        with tab1: # Table View
             selected_types_tab1 = st.multiselect(
                 "Filter by type:",
                 options=st.session_state['all_types'],
@@ -349,9 +379,8 @@ def main():
                     else:
                         st.write("N/A (Direct column or no base columns identified)")
 
-                    # --- New PBI Mapping Section ---
-                    st.markdown("---") # Visual separator
-                    st.write("**PBI Mapping for Base Columns:**")
+                    st.markdown("---") 
+                    st.write("**PBI Mapping for Base Columns (Detail):**")
                     if not item['base_columns']:
                         st.caption("No base columns to map for PBI.")
                     elif not st.session_state.get('column_mappings'):
@@ -373,9 +402,115 @@ def main():
                                     """, unsafe_allow_html=True)
                             else:
                                 st.markdown(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- *No PowerBI mapping found for this base column.*", unsafe_allow_html=True)
-                            st.markdown("<br>", unsafe_allow_html=True) # Add a little space between base columns
+                            st.markdown("<br>", unsafe_allow_html=True)
         
-        with tab3: # Raw JSON view
+        with tab3: # PBI Mapping Tab
+            st.header("Consolidated Power BI Column Mappings")
+            if not st.session_state.get('column_mappings'):
+                st.warning("Mapping file not loaded. Please check sidebar and console for errors.")
+            elif not st.session_state.get('mapping_results'):
+                st.info("No SQL query analyzed yet, or the query resulted in no columns to map.")
+            else:
+                mapping_filter = st.radio(
+                    "Show SQL Columns:",
+                    ["All", "Mapped Only", "Unmapped Only"],
+                    horizontal=True,
+                    key="pbi_mapping_tab_filter"
+                )
+
+                mapping_data_for_tab = st.session_state['mapping_results']
+                
+                total_sql_cols = len(mapping_data_for_tab)
+                mapped_sql_cols_count = sum(1 for data in mapping_data_for_tab.values() if data.get("is_mapped_overall"))
+                unmapped_sql_cols_count = total_sql_cols - mapped_sql_cols_count
+
+                m_col1, m_col2, m_col3 = st.columns(3)
+                m_col1.metric("Total SQL Columns", total_sql_cols)
+                m_col2.metric("Mapped SQL Columns", mapped_sql_cols_count)
+                m_col3.metric("Unmapped SQL Columns", unmapped_sql_cols_count)
+
+                export_rows = []
+
+                for sql_col_name, data in mapping_data_for_tab.items():
+                    is_overall_mapped = data.get("is_mapped_overall", False)
+                    
+                    display_this_sql_col = False
+                    if mapping_filter == "All":
+                        display_this_sql_col = True
+                    elif mapping_filter == "Mapped Only" and is_overall_mapped:
+                        display_this_sql_col = True
+                    elif mapping_filter == "Unmapped Only" and not is_overall_mapped:
+                        display_this_sql_col = True
+                    
+                    if display_this_sql_col:
+                        expander_title = f"SQL Column: {sql_col_name} ({data['type']})"
+                        expander_title += " ✅ (Mapped)" if is_overall_mapped else " ❌ (Unmapped)"
+                        
+                        with st.expander(expander_title):
+                            if not data["base_column_mappings"]:
+                                st.caption("This SQL column has no identified base columns.")
+                            
+                            has_at_least_one_pbi_mapping_shown = False
+                            for base_map_info in data["base_column_mappings"]:
+                                st.markdown(f"  - **Base:** `{base_map_info['original_base_col']}` (Normalized: `{base_map_info['normalized_base_col']}`)")
+                                if base_map_info["pbi_matches"]:
+                                    has_at_least_one_pbi_mapping_shown = True
+                                    for pbi_match in base_map_info["pbi_matches"]:
+                                        st.markdown(f"    - PBI: `{pbi_match['powerbi_column']}` (Table: `{pbi_match['table']}`, Column: `{pbi_match['column']}`)")
+                                        st.markdown(f"      (Source DB in Mapping: `{pbi_match['db_column']}`)")
+                                        export_rows.append({
+                                            "SQL Output Column": sql_col_name,
+                                            "SQL Column Type": data['type'],
+                                            "SQL Base Column": base_map_info['original_base_col'],
+                                            "Normalized SQL Base Column": base_map_info['normalized_base_col'],
+                                            "Mapped PBI Column": pbi_match['powerbi_column'],
+                                            "PBI Table": pbi_match['table'],
+                                            "PBI Column Name": pbi_match['column'],
+                                            "Source DB in Mapping File": pbi_match['db_column']
+                                        })
+                                else:
+                                    st.markdown("    - *No PowerBI mapping found for this base column.*")
+                                    export_rows.append({ # Also include unmapped base columns in export
+                                        "SQL Output Column": sql_col_name,
+                                        "SQL Column Type": data['type'],
+                                        "SQL Base Column": base_map_info['original_base_col'],
+                                        "Normalized SQL Base Column": base_map_info['normalized_base_col'],
+                                        "Mapped PBI Column": "N/A",
+                                        "PBI Table": "N/A",
+                                        "PBI Column Name": "N/A",
+                                        "Source DB in Mapping File": "N/A"
+                                    })
+                            if not data["base_column_mappings"]: # If SQL col has no base columns
+                                 export_rows.append({
+                                    "SQL Output Column": sql_col_name,
+                                    "SQL Column Type": data['type'],
+                                    "SQL Base Column": "N/A",
+                                    "Normalized SQL Base Column": "N/A",
+                                    "Mapped PBI Column": "N/A",
+                                    "PBI Table": "N/A",
+                                    "PBI Column Name": "N/A",
+                                    "Source DB in Mapping File": "N/A"
+                                })
+
+
+                            if not has_at_least_one_pbi_mapping_shown and data["base_column_mappings"]:
+                                st.info("Although this SQL column has base columns, none of them mapped to any Power BI columns.")
+                
+                if export_rows:
+                    export_df = pd.DataFrame(export_rows)
+                    csv_export = export_df.to_csv(index=False).encode('utf-8')
+                    st.download_button(
+                        label="Download All Mappings (CSV)",
+                        data=csv_export,
+                        file_name="pbi_column_mapping_details.csv",
+                        mime="text/csv",
+                        key="export_all_mappings_button"
+                    )
+                elif mapping_data_for_tab : # if there was data but filter resulted in no rows to show
+                    st.caption("No mappings to display based on the current filter. Try 'All'.")
+
+
+        with tab4: # Raw JSON view
             st.json(st.session_state['lineage_data'])
     
     elif analyze_button and not sql_query.strip():
