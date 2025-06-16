@@ -464,6 +464,11 @@ def main():
     if 'base_col_ambiguity_choices' not in st.session_state:
         st.session_state['base_col_ambiguity_choices'] = {}
 
+    if 'visual_selected_values' not in st.session_state:
+        st.session_state['visual_selected_values'] = []
+    if 'visual_ai_dax_results' not in st.session_state: # New session state
+        st.session_state['visual_ai_dax_results'] = {}
+
     # New session state for visual configuration
     if 'visual_type' not in st.session_state:
         st.session_state['visual_type'] = "Matrix"
@@ -1053,6 +1058,110 @@ def main():
             st.write("Rows:", st.session_state.get('visual_selected_rows', []))
             st.write("Columns:", st.session_state.get('visual_selected_columns', []))
             st.write("Values:", st.session_state.get('visual_selected_values', []))
+
+
+            st.markdown("---")
+            st.subheader("AI DAX Generation for Selected Expressions")
+
+            # Button to trigger DAX generation
+            if st.button("Generate DAX with AI for Selected Matrix Items"):
+                st.session_state['visual_ai_dax_results'] = {} # Clear previous results
+                items_to_process_for_ai = []
+                for item_list_name, item_list in [
+                    ("Row", st.session_state.get('visual_selected_rows', [])),
+                    ("Column", st.session_state.get('visual_selected_columns', [])),
+                    ("Value", st.session_state.get('visual_selected_values', []))
+                ]:
+                    for item_detail in item_list:
+                        if item_detail.get("type") == "expression" and item_detail.get("pbi_expression"):
+                            items_to_process_for_ai.append({
+                                "label": item_detail["label"],
+                                "pbi_expression": item_detail["pbi_expression"],
+                                "category": item_list_name
+                            })
+                
+                if not items_to_process_for_ai:
+                    st.info("No expressions found in the current matrix selection to generate DAX for.")
+                else:
+                    with st.spinner("Generating DAX with AI for selected items..."):
+                        for item_to_process in items_to_process_for_ai:
+                            label = item_to_process["label"]
+                            pbi_expr = item_to_process["pbi_expression"]
+                            category = item_to_process["category"]
+                            unique_key = f"{category}_{label}" # Create a unique key for session state
+
+                            dax_results = generate_dax_from_sql(pbi_expr)
+                            st.session_state['visual_ai_dax_results'][unique_key] = {
+                                "label": label,
+                                "input_pbi_expression": pbi_expr,
+                                "ai_output": dax_results,
+                                "category": category
+                            }
+                    overall_config_updated = False
+                    for list_key_str, category_name_str in [
+                        ('visual_selected_rows', "Row"),
+                        ('visual_selected_columns', "Column"),
+                        ('visual_selected_values', "Value")
+                    ]:
+                        if list_key_str in st.session_state:
+                            current_list_in_state = st.session_state[list_key_str]
+                            for item_dict_idx in range(len(current_list_in_state)):
+                                # item_dict is a reference to the dictionary in the session state list
+                                item_dict = current_list_in_state[item_dict_idx] 
+                                
+                                if item_dict.get("type") == "expression":
+                                    ai_result_lookup_key = f"{category_name_str}_{item_dict['label']}"
+                                    
+                                    # Check if this item had AI DAX before
+                                    had_previous_ai_dax = "ai_generated_dax" in item_dict
+                                    current_item_modified = False
+
+                                    if ai_result_lookup_key in st.session_state['visual_ai_dax_results']:
+                                        ai_result_data = st.session_state['visual_ai_dax_results'][ai_result_lookup_key]
+                                        ai_output_data = ai_result_data['ai_output']
+                                        recommendation_data = ai_output_data.get("recommendation", "").lower()
+                                        
+                                        if "measure" in recommendation_data:
+                                            measure_dax_from_ai = ai_output_data.get("measure")
+                                            # Add/update if a valid measure DAX is found
+                                            if measure_dax_from_ai and not measure_dax_from_ai.startswith("Error:") and measure_dax_from_ai != "Not provided or error.":
+                                                item_dict["ai_generated_dax"] = measure_dax_from_ai
+                                                current_item_modified = True
+                                    
+                                    # If no valid measure was generated this time, but an old AI DAX existed, remove it
+                                    if not current_item_modified and had_previous_ai_dax:
+                                        del item_dict["ai_generated_dax"]
+                                        current_item_modified = True # A modification (removal) happened
+                                    
+                                    if current_item_modified:
+                                        overall_config_updated = True
+                                        
+                    st.success(f"AI DAX generation complete for {len(st.session_state['visual_ai_dax_results'])} items.")
+                    if overall_config_updated:
+                        st.rerun() # Rerun to reflect changes in "Current Matrix Configuration" display
+            
+            # Display generated DAX results
+            if st.session_state['visual_ai_dax_results']:
+                st.markdown("---")
+                for key, result_info in st.session_state['visual_ai_dax_results'].items():
+                    st.markdown(f"#### AI DAX for {result_info['category']}: `{result_info['label']}`")
+                    st.markdown("**Input PBI Expression (Rule-based):**")
+                    st.code(result_info['input_pbi_expression'], language="dax")
+                    
+                    ai_output = result_info['ai_output']
+                    recommendation = ai_output.get("recommendation", "").lower()
+
+                    if "measure" in recommendation:
+                        st.write("**AI Generated DAX Measure:**")
+                        st.code(ai_output.get("measure", "Not provided or error."), language="dax")
+                    elif "calculated column" in recommendation:
+                        st.info("Calculated Column DAX generation is a Work In Progress.")
+                    else:
+                        # Fallback for other recommendations or errors - you might want to show both or a generic message
+                        st.error("AI could not generate a specific DAX measure or an error occurred.")
+                        
+                    st.markdown("---")
+
 
 
         elif st.session_state['visual_type'] == "Table":
