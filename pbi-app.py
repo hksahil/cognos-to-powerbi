@@ -212,6 +212,90 @@ def generate_powerbi_equivalent_formula(original_sql_expression, base_columns_fr
     return modified_expression, made_change
 
 # ... (generate_dax_from_sql - AI based - remains the same) ...
+def generate_dax_from_sql(sql_expression):
+    try:
+        model = genai.GenerativeModel('gemini-2.5-flash-preview-05-20')
+        prompt = f"""
+        Analyze the following SQL expression and provide:
+        1. An equivalent PowerBI DAX expression for a MEASURE (properly formatted with line breaks and indentation for readability)
+        2. An equivalent PowerBI DAX expression for a CALCULATED COLUMN (properly formatted with line breaks and indentation for readability)   
+        3. A recommendation on whether this should be implemented as a measure or calculated column in PowerBI based on its characteristics     
+
+        SQL Expression:
+        ```sql
+        {sql_expression}
+        ```
+
+        Format your response exactly like this example with no additional text:
+        MEASURE:
+        CALCULATE(
+            SUM(Sales[Revenue]),
+            Sales[Year] = 2023
+        )
+        CALCULATED_COLUMN:
+        IF(
+            [Price] * [Quantity] > 1000,
+            "High Value",
+            "Standard"
+        )
+        RECOMMENDATION: measure
+        """
+
+        response = model.generate_content(prompt)
+
+        # Clean up response to remove markdown formatting
+        dax_response = response.text.strip()
+
+        # Extract the different sections using more sophisticated parsing
+        sections = {'measure': '', 'calculated_column': '', 'recommendation': ''}
+
+        # Split by sections markers
+        parts = dax_response.split('MEASURE:')
+        if len(parts) > 1:
+            rest = parts[1]
+
+            # Get CALCULATED_COLUMN section
+            calc_parts = rest.split('CALCULATED_COLUMN:')
+            if len(calc_parts) > 1:
+                sections['measure'] = calc_parts[0].strip()
+                rest = calc_parts[1]
+
+                # Get RECOMMENDATION section
+                rec_parts = rest.split('RECOMMENDATION:')
+                if len(rec_parts) > 1:
+                    sections['calculated_column'] = rec_parts[0].strip()
+                    sections['recommendation'] = rec_parts[1].strip()
+                else:
+                    sections['calculated_column'] = rest.strip()
+
+        # Clean up any markdown formatting in the sections
+        for key in ['measure', 'calculated_column']:
+            # Remove code block markers
+            sections[key] = sections[key].replace('```dax', '').replace('```', '')
+
+            # Remove language identifier if it appears at the beginning
+            if sections[key].lstrip().startswith('dax'):
+                sections[key] = sections[key].lstrip()[3:].lstrip()
+
+            if sections[key].lstrip().startswith('DAX'):
+                sections[key] = sections[key].lstrip()[3:].lstrip()
+
+            # Remove any trailing backticks
+            sections[key] = sections[key].rstrip('`').strip()
+
+        return {
+            "measure": sections['measure'],
+            "calculated_column": sections['calculated_column'],
+            "recommendation": sections['recommendation']
+        }
+    except Exception as e:
+        return {
+            "measure": f"Error: {str(e)}",
+            "calculated_column": f"Error: {str(e)}",
+            "recommendation": "error"
+        }
+
+
 
 def main():
     st.set_page_config(
@@ -350,7 +434,7 @@ def main():
             selected_types_tab2 = st.multiselect(
                 "Filter by type:",
                 options=st.session_state['all_types'],
-                default=st.session_state['all_types'],
+                default=st.session_state['all_types'],  
                 key="filter_types_tab2"
             )
             
@@ -360,6 +444,9 @@ def main():
                 with st.expander(f"Column: {item['column']} ({item['type']})"):
                     st.write("**Type:** ", item['type'])
                     
+                    pbi_eq_formula = item.get('final_expression', "") # Initialize with original SQL
+                    made_change_in_rule_based_translation = False # Flag for rule-based translation
+
                     if item['type'] == 'expression' and item.get('final_expression'):
                         # Display original SQL Expression
                         formatted_expr = sqlparse.format(
@@ -373,52 +460,63 @@ def main():
                         
                         # --- Generate and Display Power BI Equivalent Formula (Rule-Based) ---
                         st.markdown("---")
-                        st.write("**Power BI Equivalent Formula (Rule-Based Translation):**")
+                        st.write("**Power BI Equivalent Formula:**")
                         if st.session_state.get('column_mappings') and item.get('base_columns'):
                             # Use the original, unformatted expression for replacement
-                            pbi_eq_formula, made_change = generate_powerbi_equivalent_formula(
+                            # Store the result of rule-based translation
+                            pbi_eq_formula, made_change_in_rule_based_translation = generate_powerbi_equivalent_formula(
                                 item['final_expression'], 
                                 item.get('base_columns'), 
                                 st.session_state['column_mappings']
                             )
                             
-                            if made_change:
-                                # Display the translated formula, using 'dax' for potential highlighting
+                            if made_change_in_rule_based_translation:
                                 st.code(pbi_eq_formula, language="dax") 
                             else:
-                                st.caption("Could not translate to a distinct Power BI equivalent (or no mappings found for base columns in the expression).")
+                                # If no change, pbi_eq_formula still holds the original SQL.
+                                # We can indicate that no rule-based translation occurred.
+                                st.caption("Could not translate to a distinct Power BI equivalent using rules (or no mappings found for base columns in the expression).")
+                                pbi_eq_formula = item['final_expression'] # Ensure it's the original SQL for AI if no rule change
                         elif not item.get('base_columns'):
-                            st.caption("SQL expression has no identified base columns to map.")
-                        elif not item.get('final_expression'): # Should be caught by outer if, but good for safety
+                            st.caption("SQL expression has no identified base columns to map for rule-based translation.")
+                        elif not item.get('final_expression'):
                              st.caption("SQL expression is empty.")
-                        else: # Mappings not loaded
-                            st.warning("Mapping file not loaded. Cannot generate Power BI equivalent formula.")
+                        else: 
+                            st.warning("Mapping file not loaded. Cannot generate Power BI equivalent formula using rules.")
                         st.markdown("---")
                                                 
                         # --- AI DAX Generation ---
-                        item_id = f"{item['column']}_{i}" # Unique key for button and state
-                        if st.button(f"Generate DAX with AI", key=f"dax_btn_{item_id}"):
-                            with st.spinner("Generating DAX with AI..."):
-                                dax_results = generate_dax_from_sql(item['final_expression'])
-                                st.session_state['dax_expressions'][item_id] = dax_results
+                        item_id = f"{item['column']}_{i}" 
+                        
+                        # Determine which expression to send to AI
+                        expression_for_ai = pbi_eq_formula if made_change_in_rule_based_translation else item['final_expression']
+                        
+                        if st.button(f"Generate DAX", key=f"dax_btn_{item_id}"):
+                            if expression_for_ai and expression_for_ai.strip():
+                                with st.spinner("Generating DAX..."):
+                                    # Send the potentially translated expression to the AI
+                                    dax_results = generate_dax_from_sql(expression_for_ai)
+                                    st.session_state['dax_expressions'][item_id] = dax_results
+                            else:
+                                st.warning("Expression for AI is empty. Cannot generate DAX.")
+
 
                         if item_id in st.session_state['dax_expressions']:
                             dax_results = st.session_state['dax_expressions'][item_id]
                             recommendation = dax_results.get("recommendation", "").lower()
                             if recommendation == "measure":
-                                st.info("💡 **AI Recommendation:** **MEASURE**")
-                            elif "calculated column" in recommendation: # More flexible check
-                                st.info("💡 **AI Recommendation:** **CALCULATED COLUMN**")
+                                st.info("💡 **Recommendation:** **MEASURE**")
+                            elif "calculated column" in recommendation: 
+                                st.info("💡 **Recommendation:** **CALCULATED COLUMN**")
                             elif recommendation and recommendation != "error":
-                                 st.info(f"💡 **AI Recommendation:** {recommendation.upper()}")
+                                 st.info(f"💡 **Recommendation:** {recommendation.upper()}")
 
-
-                            st.write("**AI Generated DAX Measure:**")
+                            st.write("**Generated DAX Measure:**")
                             st.code(dax_results.get("measure", "Not provided or error."), language="dax")
-                            st.write("**AI Generated DAX Calculated Column:**")
+                            st.write("**Generated DAX Calculated Column:**")
                             st.code(dax_results.get("calculated_column", "Not provided or error."), language="dax")
                     
-                    elif item['type'] == 'expression': # Expression but no final_expression content
+                    elif item['type'] == 'expression': 
                         st.code("No expression available for this column.", language="text")
                         
                     st.write("**Base columns (from SQL Lineage):**")
