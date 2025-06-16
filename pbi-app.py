@@ -148,45 +148,35 @@ def find_matching_powerbi_columns(db_column_from_sql, mappings_dict):
     return []
 
 
-def generate_powerbi_equivalent_formula(original_sql_expression, base_columns_from_lineage, column_mappings_dict):
-    """
-    Replaces database column identifiers in a SQL expression with their 
-    Power BI DAX equivalents ('Table Name'[Column Name]) based on mappings.
-    Returns the modified expression and a boolean indicating if changes were made.
-    """
-    # print(f"\n--- Debugging generate_powerbi_equivalent_formula ---")
-    # print(f"Original SQL Expression: {original_sql_expression}")
-    # print(f"Base Columns from Lineage: {base_columns_from_lineage}")
-
+def generate_powerbi_equivalent_formula(original_sql_expression, base_columns_from_lineage, column_mappings_dict, resolved_base_col_to_pbi=None):
     if not original_sql_expression or not base_columns_from_lineage or not column_mappings_dict:
-        # print("Exiting early: Missing original_sql_expression, base_columns, or column_mappings_dict")
         return original_sql_expression, False
 
-    replacements = {} 
-
+    replacements = {}
     sorted_unique_base_columns = sorted(list(set(base_columns_from_lineage)), key=len, reverse=True)
-    # print(f"Sorted Unique Base Columns for Replacement: {sorted_unique_base_columns}")
 
     for sql_base_col_str in sorted_unique_base_columns:
-        # Use resolved mapping if present
-        resolved_label = st.session_state.get('base_col_ambiguity_choices', {}).get(sql_base_col_str)
-        pbi_matches = find_matching_powerbi_columns(sql_base_col_str, column_mappings_dict)
         dax_full_ref = None
-        if resolved_label and pbi_matches:
-            resolved = next((m for m in pbi_matches if f"'{m['table']}'[{m['column']}]" == resolved_label), None)
-            if resolved:
-                dax_full_ref = resolved_label
-        elif pbi_matches:
-            first_match = pbi_matches[0]
-            pbi_table = first_match.get("table")
-            pbi_column = first_match.get("column")
-            if pbi_table and pbi_column:
-                dax_full_ref = f"'{pbi_table}'[{pbi_column}]"
+        # Use resolved mapping if provided
+        if resolved_base_col_to_pbi and sql_base_col_str in resolved_base_col_to_pbi:
+            dax_full_ref = resolved_base_col_to_pbi[sql_base_col_str]
+        else:
+            resolved_label = st.session_state.get('base_col_ambiguity_choices', {}).get(sql_base_col_str)
+            pbi_matches = find_matching_powerbi_columns(sql_base_col_str, column_mappings_dict)
+            if resolved_label and pbi_matches:
+                resolved = next((m for m in pbi_matches if f"'{m['table']}'[{m['column']}]" == resolved_label), None)
+                if resolved:
+                    dax_full_ref = resolved_label
+            elif pbi_matches:
+                first_match = pbi_matches[0]
+                pbi_table = first_match.get("table")
+                pbi_column = first_match.get("column")
+                if pbi_table and pbi_column:
+                    dax_full_ref = f"'{pbi_table}'[{pbi_column}]"
         if dax_full_ref:
             replacements[sql_base_col_str] = dax_full_ref
-    # print(f"Replacements dictionary built: {replacements}")
+
     if not replacements:
-        # print("No replacements generated. Returning original expression.")
         return original_sql_expression, False
 
     modified_expression = original_sql_expression
@@ -195,18 +185,13 @@ def generate_powerbi_equivalent_formula(original_sql_expression, base_columns_fr
     for sql_token_to_replace in sorted_unique_base_columns:
         if sql_token_to_replace in replacements:
             dax_equivalent = replacements[sql_token_to_replace]
-            # print(f"  Attempting to replace: '{sql_token_to_replace}' with '{dax_equivalent}'")
             if sql_token_to_replace in modified_expression:
                 modified_expression = modified_expression.replace(sql_token_to_replace, dax_equivalent)
                 made_change = True
-                # print(f"    Replaced. Current expression: {modified_expression}")
-            # else:
-                # print(f"    Token '{sql_token_to_replace}' not found in current expression for replacement.")
-            
-    # print(f"Final Modified Expression: {modified_expression}")
-    # print(f"Made Change: {made_change}")
-    # print(f"--- End Debugging ---")
+
     return modified_expression, made_change
+
+
 
 # ... (generate_dax_from_sql - AI based - remains the same) ...
 def generate_dax_from_sql(sql_expression):
@@ -408,6 +393,50 @@ def build_visual_candidates():
             })
     return visual_candidates
 
+
+def enrich_selected_items(selected_labels):
+    import re
+    enriched = []
+    for label in selected_labels:
+        candidate = next((c for c in st.session_state['visual_config_candidates'] if c['chosen_display_label'] == label), None)
+        if candidate:
+            entry = {
+                "label": label,
+                "type": "expression" if candidate.get("is_sql_expression_type_from_analyzer") else "base",
+                "sql_name": candidate.get("sql_name"),
+                "pbi_expression": None,
+                "pbi_table": None, # Initialize for both types
+                "pbi_column": None # Initialize for base type
+            }
+            if entry["type"] == "expression":
+                lineage_item = next((item for item in st.session_state['lineage_data'] if item['column'] == candidate.get("sql_name")), None)
+                if lineage_item:
+                    orig_sql_expr = lineage_item.get('final_expression')
+                    base_columns = lineage_item.get('base_columns', [])
+                    if orig_sql_expr and base_columns:
+                        pbi_expr, _ = generate_powerbi_equivalent_formula(
+                            orig_sql_expr,
+                            base_columns,
+                            st.session_state['column_mappings'],
+                            st.session_state.get('resolved_base_col_to_pbi', {})
+                        )
+                        entry["pbi_expression"] = pbi_expr
+                        # Try to extract the first table name from the translated PBI expression
+                        if pbi_expr:
+                            # Regex to find the first instance of 'TableName'[ColumnName]
+                            # It will capture 'TableName'
+                            match_table = re.search(r"'([^']+?)'\[[^\]]+?\]", pbi_expr)
+                            if match_table:
+                                entry["pbi_table"] = match_table.group(1)
+            else: # type is "base"
+                # Extract table and column from label like: 'Table'[Column]
+                m = re.match(r"'(.+?)'\[(.+?)\]", label)
+                if m:
+                    entry["pbi_table"] = m.group(1)
+                    entry["pbi_column"] = m.group(2)
+                # If no match, pbi_table and pbi_column remain None (as initialized)
+            enriched.append(entry)
+    return enriched
 
 
 
@@ -889,6 +918,28 @@ def main():
         
 
 
+        # Build resolved_base_col_to_pbi mapping
+        resolved_base_col_to_pbi = {}
+        for item in st.session_state['lineage_data']:
+            for base_col in item.get('base_columns', []):
+                matches = find_matching_powerbi_columns(base_col, st.session_state['column_mappings'])
+                resolved_label = st.session_state['base_col_ambiguity_choices'].get(base_col)
+                pbi_ref = None
+                if resolved_label and matches:
+                    # Use resolved mapping
+                    resolved = next((m for m in matches if f"'{m['table']}'[{m['column']}]" == resolved_label), None)
+                    if resolved:
+                        pbi_ref = resolved_label
+                elif matches:
+                    # Use first mapping if not ambiguous
+                    m = matches[0]
+                    pbi_ref = f"'{m['table']}'[{m['column']}]"
+                if pbi_ref:
+                    resolved_base_col_to_pbi[base_col] = pbi_ref
+        st.session_state['resolved_base_col_to_pbi'] = resolved_base_col_to_pbi
+
+
+
         st.session_state['visual_config_candidates'] = build_visual_candidates()
 
         st.markdown("---")
@@ -963,55 +1014,45 @@ def main():
             st.markdown("#### Configure Matrix Visual")
             options_for_rows = [
                 item for item in all_available_display_labels_for_visual 
-                if item not in st.session_state.get('visual_selected_columns', []) and \
-                   item not in st.session_state.get('visual_selected_values', [])
+                if item not in [x["label"] for x in st.session_state.get('visual_selected_columns', [])] and \
+                   item not in [x["label"] for x in st.session_state.get('visual_selected_values', [])]
             ]
-            current_selected_rows = [r for r in st.session_state.get('visual_selected_rows', []) if r in options_for_rows]
-            new_selected_rows = st.multiselect(
+            current_selected_rows = [x["label"] for x in st.session_state.get('visual_selected_rows', []) if x["label"] in options_for_rows]
+            temp_selected_rows = st.multiselect(
                 "Rows:", options_for_rows, default=current_selected_rows, key="matrix_rows"
             )
-            if new_selected_rows != st.session_state.get('visual_selected_rows', []):
-                st.session_state['visual_selected_rows'] = new_selected_rows
-                st.rerun()
 
             options_for_columns = [
                 item for item in all_available_display_labels_for_visual 
-                if item not in st.session_state.get('visual_selected_rows', []) and \
-                   item not in st.session_state.get('visual_selected_values', [])
+                if item not in temp_selected_rows and \
+                   item not in [x["label"] for x in st.session_state.get('visual_selected_values', [])]
             ]
-            current_selected_columns = [c for c in st.session_state.get('visual_selected_columns', []) if c in options_for_columns]
-            new_selected_columns = st.multiselect(
+            current_selected_columns = [x["label"] for x in st.session_state.get('visual_selected_columns', []) if x["label"] in options_for_columns]
+            temp_selected_columns = st.multiselect(
                 "Columns:", options_for_columns, default=current_selected_columns, key="matrix_columns"
             )
-            if new_selected_columns != st.session_state.get('visual_selected_columns', []):
-                st.session_state['visual_selected_columns'] = new_selected_columns
-                st.rerun()
 
             options_for_values = [
                 item for item in all_available_display_labels_for_visual 
-                if item not in st.session_state.get('visual_selected_rows', []) and \
-                   item not in st.session_state.get('visual_selected_columns', [])
+                if item not in temp_selected_rows and \
+                   item not in temp_selected_columns
             ]
-            current_selected_values = [v for v in st.session_state.get('visual_selected_values', []) if v in options_for_values]
-            new_selected_values = st.multiselect(
+            current_selected_values = [x["label"] for x in st.session_state.get('visual_selected_values', []) if x["label"] in options_for_values]
+            temp_selected_values = st.multiselect(
                 "Values:", options_for_values, default=current_selected_values, key="matrix_values"
             )
-            if new_selected_values != st.session_state.get('visual_selected_values', []):
-                st.session_state['visual_selected_values'] = new_selected_values
-                st.rerun()
+
+            # Save button
+            if st.button("Save Matrix Selection"):
+                st.session_state['visual_selected_rows'] = enrich_selected_items(temp_selected_rows)
+                st.session_state['visual_selected_columns'] = enrich_selected_items(temp_selected_columns)
+                st.session_state['visual_selected_values'] = enrich_selected_items(temp_selected_values)
+                st.success("Matrix selection saved!")
 
             st.write("Current Matrix Configuration (Display Labels):")
             st.write("Rows:", st.session_state.get('visual_selected_rows', []))
             st.write("Columns:", st.session_state.get('visual_selected_columns', []))
             st.write("Values:", st.session_state.get('visual_selected_values', []))
-
-            # For debugging: show the actual DAX references for selected items
-            # selected_rows_dax = [next((c['chosen_pbi_dax_reference'] for c in st.session_state['visual_config_candidates'] if c['chosen_display_label'] == row_label), None) for row_label in st.session_state.get('visual_selected_rows', [])]
-            # selected_cols_dax = [next((c['chosen_pbi_dax_reference'] for c in st.session_state['visual_config_candidates'] if c['chosen_display_label'] == col_label), None) for col_label in st.session_state.get('visual_selected_columns', [])]
-            # selected_vals_dax = [next((c['chosen_pbi_dax_reference'] for c in st.session_state['visual_config_candidates'] if c['chosen_display_label'] == val_label), None) for val_label in st.session_state.get('visual_selected_values', [])]
-            # st.write("Actual DAX for Rows:", selected_rows_dax)
-            # st.write("Actual DAX for Columns:", selected_cols_dax)
-            # st.write("Actual DAX for Values:", selected_vals_dax)
 
 
         elif st.session_state['visual_type'] == "Table":
