@@ -311,14 +311,30 @@ def main():
         st.session_state['lineage_data'] = None
     if 'all_types' not in st.session_state:
         st.session_state['all_types'] = []
-    if 'dax_expressions' not in st.session_state: # For AI DAX
+    if 'dax_expressions' not in st.session_state:
         st.session_state['dax_expressions'] = {}
-    
     if 'column_mappings' not in st.session_state:
         st.session_state['column_mappings'] = load_column_mappings()
-    
-    if 'mapping_results' not in st.session_state: # For PBI Mapping Tab
+    if 'mapping_results' not in st.session_state:
         st.session_state['mapping_results'] = None
+
+    # New session state for visual configuration
+    if 'visual_type' not in st.session_state:
+        st.session_state['visual_type'] = "Matrix"
+    if 'visual_config_candidates' not in st.session_state:
+        # Structure: {'id': sql_name, 'sql_name': sql_name, 'is_sql_expression': bool, 
+        #             'pbi_options': [{'display_label': str, 'pbi_dax_reference': str, ...}], 
+        #             'chosen_display_label': str, 'chosen_pbi_dax_reference': str}
+        st.session_state['visual_config_candidates'] = []
+    if 'visual_ambiguity_choices' not in st.session_state:
+        # Stores user's choice for ambiguous items: {sql_name: chosen_display_label}
+        st.session_state['visual_ambiguity_choices'] = {}
+    if 'visual_selected_rows' not in st.session_state:
+        st.session_state['visual_selected_rows'] = []
+    if 'visual_selected_columns' not in st.session_state:
+        st.session_state['visual_selected_columns'] = []
+    if 'visual_selected_values' not in st.session_state:
+        st.session_state['visual_selected_values'] = []
     
     st.title("SQL to Power BI Column Mapper")
     st.markdown("""
@@ -357,7 +373,12 @@ def main():
             st.session_state['lineage_data'] = None
             st.session_state['all_types'] = []
             st.session_state['dax_expressions'] = {}
-            st.session_state['mapping_results'] = None # Clear mapping results too
+            st.session_state['mapping_results'] = None
+            st.session_state['visual_config_candidates'] = []
+            st.session_state['visual_ambiguity_choices'] = {}
+            st.session_state['visual_selected_rows'] = []
+            st.session_state['visual_selected_columns'] = []
+            st.session_state['visual_selected_values'] = []
             st.rerun()
     
     if analyze_button and sql_query.strip():
@@ -367,67 +388,121 @@ def main():
                 st.session_state['lineage_data'] = analyzer.analyze()
                 
                 if st.session_state['lineage_data']:
-                    df = pd.DataFrame(st.session_state['lineage_data'])
-                    st.session_state['all_types'] = sorted(df['type'].unique().tolist())
+                    # ... (existing logic for df, all_types, mapping_results_for_tab) ...
 
-                    # Prepare data for the PBI Mapping tab
-                    if st.session_state.get('column_mappings'):
-                        mapping_results_for_tab = {}
-                        for item in st.session_state['lineage_data']:
-                            sql_output_column_name = item['column']
-                            base_columns_for_item = item.get('base_columns', [])
+                    # --- Prepare data for Visual Configuration ---
+                    visual_candidates = []
+                    for item_vis_conf in st.session_state['lineage_data']:
+                        sql_name = item_vis_conf['column']
+                        is_analyzer_expression_type = item_vis_conf['type'] == 'expression'
+                        original_sql_content_for_expr = item_vis_conf.get('final_expression')
+                        base_columns_from_lineage = item_vis_conf.get('base_columns')
+                        pbi_options_for_item = []
+
+                        if not is_analyzer_expression_type:
+                            # Type is "base" (or not 'expression')
+                            # Attempt 1: Map the sql_name (output name/alias) directly
+                            pbi_matches = find_matching_powerbi_columns(sql_name, st.session_state['column_mappings'])
                             
-                            current_sql_col_mappings = []
-                            has_any_pbi_mapping_for_this_sql_col = False
+                            # Attempt 2: If sql_name didn't map, and it has a single base column, try mapping the base column.
+                            if not pbi_matches and base_columns_from_lineage and len(base_columns_from_lineage) == 1:
+                                pbi_matches = find_matching_powerbi_columns(base_columns_from_lineage[0], st.session_state['column_mappings'])
 
-                            for base_col in base_columns_for_item:
-                                pbi_matches = find_matching_powerbi_columns(base_col, st.session_state['column_mappings'])
-                                if pbi_matches:
-                                    has_any_pbi_mapping_for_this_sql_col = True
-                                current_sql_col_mappings.append({
-                                    "original_base_col": base_col,
-                                    "normalized_base_col": normalize_column_identifier(base_col),
-                                    "pbi_matches": pbi_matches # This will be a list of PBI targets
+                            if pbi_matches:
+                                for match in pbi_matches:
+                                    tbl = match.get("table")
+                                    col = match.get("column")
+                                    if tbl and col:
+                                        pbi_dax_ref = f"'{tbl}'[{col}]"
+                                        pbi_options_for_item.append({
+                                            'display_label': pbi_dax_ref,  # Show PBI mapped name
+                                            'pbi_dax_reference': pbi_dax_ref,
+                                            'table': tbl, 'column': col, 'is_expression_translation': False,
+                                            'original_sql_column_alias': sql_name, # The original SQL output name
+                                            'original_sql_expression': None
+                                        })
+                            else: # No PBI mapping found for this "base" type
+                                pbi_options_for_item.append({
+                                    'display_label': sql_name, # Show SQL alias
+                                    'pbi_dax_reference': sql_name, # Use SQL alias as reference
+                                    'is_expression_translation': False,
+                                    'original_sql_column_alias': sql_name,
+                                    'original_sql_expression': None
                                 })
-                            
-                            mapping_results_for_tab[sql_output_column_name] = {
-                                "type": item['type'],
-                                "base_column_mappings": current_sql_col_mappings,
-                                "is_mapped_overall": has_any_pbi_mapping_for_this_sql_col
-                            }
-                        st.session_state['mapping_results'] = mapping_results_for_tab
-                    else:
-                        st.session_state['mapping_results'] = None # No mappings if mapping file not loaded
+                        else:
+                            # Type is "expression"
+                            display_label_for_dropdown = sql_name # Always show SQL alias for expressions in dropdown
 
+                            # Determine the actual PBI DAX reference for this expression
+                            actual_pbi_dax_reference = original_sql_content_for_expr or sql_name # Default
+                            if original_sql_content_for_expr:
+                                translated_expr, made_change = generate_powerbi_equivalent_formula(
+                                    original_sql_content_for_expr,
+                                    base_columns_from_lineage,
+                                    st.session_state['column_mappings']
+                                )
+                                if made_change:
+                                    actual_pbi_dax_reference = translated_expr
+                                # else, actual_pbi_dax_reference remains original_sql_content_for_expr
+                            
+                            pbi_options_for_item.append({
+                                'display_label': display_label_for_dropdown,
+                                'pbi_dax_reference': actual_pbi_dax_reference,
+                                'is_expression_translation': made_change if original_sql_content_for_expr else False,
+                                'original_sql_expression': original_sql_content_for_expr,
+                                'original_sql_column_alias': sql_name
+                            })
+
+                        # Add to visual_candidates
+                        if pbi_options_for_item:
+                            default_chosen_display_label = pbi_options_for_item[0]['display_label']
+                            default_chosen_pbi_dax_reference = pbi_options_for_item[0]['pbi_dax_reference']
+
+                            pre_chosen_display_label_from_session = st.session_state.get('visual_ambiguity_choices', {}).get(sql_name)
+                            if pre_chosen_display_label_from_session:
+                                found_option_for_pre_choice = next((opt for opt in pbi_options_for_item if opt['display_label'] == pre_chosen_display_label_from_session), None)
+                                if found_option_for_pre_choice:
+                                    default_chosen_display_label = found_option_for_pre_choice['display_label']
+                                    default_chosen_pbi_dax_reference = found_option_for_pre_choice['pbi_dax_reference']
+                            
+                            visual_candidates.append({
+                                'id': sql_name, 
+                                'sql_name': sql_name,
+                                'is_sql_expression_type_from_analyzer': is_analyzer_expression_type,
+                                'pbi_options': pbi_options_for_item,
+                                'chosen_display_label': default_chosen_display_label,
+                                'chosen_pbi_dax_reference': default_chosen_pbi_dax_reference
+                            })
+                    st.session_state['visual_config_candidates'] = visual_candidates
+                    st.session_state['visual_selected_rows'] = []
+                    st.session_state['visual_selected_columns'] = []
+                    st.session_state['visual_selected_values'] = []
         except Exception as e:
-            st.error(f"Error analyzing query: {str(e)}")
+            st.error(f"Error analyzing query or preparing visual candidates: {str(e)}")
             st.exception(e)
-    
+
+    # --- Display Analysis Results Tabs (existing logic) ---
     if st.session_state['lineage_data']:
         st.subheader("Analysis Results")
-        
         df = pd.DataFrame(st.session_state['lineage_data'])
-        
-        # Adjusted to 4 tabs
         tab1, tab2, tab3, tab4 = st.tabs(["Table View", "Detail View", "PBI Mapping", "Raw JSON"])
-        
+        # ... (Tab1, Tab2, Tab3, Tab4 logic - ensure variable names are unique if needed, like item_detail_data, etc.) ...
         with tab1: # Table View
             selected_types_tab1 = st.multiselect(
                 "Filter by type:",
                 options=st.session_state['all_types'],
                 default=st.session_state['all_types'],
-                key="filter_types_tab1"
+                key="filter_types_tab1_vis" 
             )
-            
-            filtered_df = df[df['type'].isin(selected_types_tab1)] if selected_types_tab1 else df
-            st.dataframe(filtered_df, use_container_width=True)
-            
-            csv = filtered_df.to_csv(index=False).encode('utf-8')
+            filtered_df_tab1 = df[df['type'].isin(selected_types_tab1)] if selected_types_tab1 else df
+            st.dataframe(filtered_df_tab1, use_container_width=True)
+            csv_tab1 = filtered_df_tab1.to_csv(index=False).encode('utf-8')
             st.download_button(
                 label="Download CSV",
-                data=csv,
+                data=csv_tab1,
                 file_name="lineage_analysis.csv",
-                mime="text/csv"
+                mime="text/csv",
+                key="download_csv_tab1_vis" 
             )
         
         with tab2: # Detail View
@@ -435,241 +510,312 @@ def main():
                 "Filter by type:",
                 options=st.session_state['all_types'],
                 default=st.session_state['all_types'],  
-                key="filter_types_tab2"
+                key="filter_types_tab2_vis" 
             )
-            
-            filtered_items = [item for item in st.session_state['lineage_data'] if item['type'] in selected_types_tab2] if selected_types_tab2 else st.session_state['lineage_data']
-            
-            for i, item in enumerate(filtered_items):
-                with st.expander(f"Column: {item['column']} ({item['type']})"):
-                    st.write("**Type:** ", item['type'])
-                    
-                    pbi_eq_formula = item.get('final_expression', "") # Initialize with original SQL
-                    made_change_in_rule_based_translation = False # Flag for rule-based translation
-
-                    if item['type'] == 'expression' and item.get('final_expression'):
-                        # Display original SQL Expression
-                        formatted_expr = sqlparse.format(
-                            item['final_expression'],
+            filtered_items_tab2 = [item_detail for item_detail in st.session_state['lineage_data'] if item_detail['type'] in selected_types_tab2] if selected_types_tab2 else st.session_state['lineage_data']
+            for i_detail, item_detail_data in enumerate(filtered_items_tab2): 
+                with st.expander(f"Column: {item_detail_data['column']} ({item_detail_data['type']})"):
+                    st.write("**Type:** ", item_detail_data['type'])
+                    pbi_eq_formula_detail = item_detail_data.get('final_expression', "") 
+                    made_change_in_rule_based_translation_detail = False 
+                    if item_detail_data['type'] == 'expression' and item_detail_data.get('final_expression'):
+                        formatted_expr_detail = sqlparse.format(
+                            item_detail_data['final_expression'],
                             reindent=True,
                             keyword_case='upper',
                             indent_width=2
                         )
                         st.write("**SQL Expression:**")
-                        st.code(formatted_expr, language="sql")
-                        
-                        # --- Generate and Display Power BI Equivalent Formula (Rule-Based) ---
+                        st.code(formatted_expr_detail, language="sql")
                         st.markdown("---")
-                        st.write("**Power BI Equivalent Formula:**")
-                        if st.session_state.get('column_mappings') and item.get('base_columns'):
-                            # Use the original, unformatted expression for replacement
-                            # Store the result of rule-based translation
-                            pbi_eq_formula, made_change_in_rule_based_translation = generate_powerbi_equivalent_formula(
-                                item['final_expression'], 
-                                item.get('base_columns'), 
+                        st.write("**Power BI Equivalent Formula (Rule-Based Translation):**")
+                        if st.session_state.get('column_mappings') and item_detail_data.get('base_columns'):
+                            pbi_eq_formula_detail, made_change_in_rule_based_translation_detail = generate_powerbi_equivalent_formula(
+                                item_detail_data['final_expression'], 
+                                item_detail_data.get('base_columns'), 
                                 st.session_state['column_mappings']
                             )
-                            
-                            if made_change_in_rule_based_translation:
-                                st.code(pbi_eq_formula, language="dax") 
+                            if made_change_in_rule_based_translation_detail:
+                                st.code(pbi_eq_formula_detail, language="dax") 
                             else:
-                                # If no change, pbi_eq_formula still holds the original SQL.
-                                # We can indicate that no rule-based translation occurred.
                                 st.caption("Could not translate to a distinct Power BI equivalent using rules (or no mappings found for base columns in the expression).")
-                                pbi_eq_formula = item['final_expression'] # Ensure it's the original SQL for AI if no rule change
-                        elif not item.get('base_columns'):
+                                pbi_eq_formula_detail = item_detail_data['final_expression'] 
+                        elif not item_detail_data.get('base_columns'):
                             st.caption("SQL expression has no identified base columns to map for rule-based translation.")
-                        elif not item.get('final_expression'):
+                        elif not item_detail_data.get('final_expression'):
                              st.caption("SQL expression is empty.")
                         else: 
                             st.warning("Mapping file not loaded. Cannot generate Power BI equivalent formula using rules.")
                         st.markdown("---")
-                                                
-                        # --- AI DAX Generation ---
-                        item_id = f"{item['column']}_{i}" 
-                        
-                        # Determine which expression to send to AI
-                        expression_for_ai = pbi_eq_formula if made_change_in_rule_based_translation else item['final_expression']
-                        
-                        if st.button(f"Generate DAX", key=f"dax_btn_{item_id}"):
-                            if expression_for_ai and expression_for_ai.strip():
-                                with st.spinner("Generating DAX..."):
-                                    # Send the potentially translated expression to the AI
-                                    dax_results = generate_dax_from_sql(expression_for_ai)
-                                    st.session_state['dax_expressions'][item_id] = dax_results
+                        item_id_detail = f"{item_detail_data['column']}_{i_detail}" 
+                        expression_for_ai_detail = pbi_eq_formula_detail if made_change_in_rule_based_translation_detail else item_detail_data['final_expression']
+                        if st.button(f"Generate DAX with AI", key=f"dax_btn_{item_id_detail}_vis"): 
+                            if expression_for_ai_detail and expression_for_ai_detail.strip():
+                                with st.spinner("Generating DAX with AI..."):
+                                    dax_results_detail = generate_dax_from_sql(expression_for_ai_detail)
+                                    st.session_state['dax_expressions'][item_id_detail] = dax_results_detail
                             else:
                                 st.warning("Expression for AI is empty. Cannot generate DAX.")
-
-
-                        if item_id in st.session_state['dax_expressions']:
-                            dax_results = st.session_state['dax_expressions'][item_id]
-                            recommendation = dax_results.get("recommendation", "").lower()
-                            if recommendation == "measure":
-                                st.info("💡 **Recommendation:** **MEASURE**")
-                            elif "calculated column" in recommendation: 
-                                st.info("💡 **Recommendation:** **CALCULATED COLUMN**")
-                            elif recommendation and recommendation != "error":
-                                 st.info(f"💡 **Recommendation:** {recommendation.upper()}")
-
-                            st.write("**Generated DAX Measure:**")
-                            st.code(dax_results.get("measure", "Not provided or error."), language="dax")
-                            st.write("**Generated DAX Calculated Column:**")
-                            st.code(dax_results.get("calculated_column", "Not provided or error."), language="dax")
-                    
-                    elif item['type'] == 'expression': 
+                        if item_id_detail in st.session_state['dax_expressions']:
+                            dax_results_render = st.session_state['dax_expressions'][item_id_detail] 
+                            recommendation_render = dax_results_render.get("recommendation", "").lower()
+                            if recommendation_render == "measure":
+                                st.info("💡 **AI Recommendation:** **MEASURE**")
+                            elif "calculated column" in recommendation_render: 
+                                st.info("💡 **AI Recommendation:** **CALCULATED COLUMN**")
+                            elif recommendation_render and recommendation_render != "error":
+                                 st.info(f"💡 **AI Recommendation:** {recommendation_render.upper()}")
+                            st.write("**AI Generated DAX Measure:**")
+                            st.code(dax_results_render.get("measure", "Not provided or error."), language="dax")
+                            st.write("**AI Generated DAX Calculated Column:**")
+                            st.code(dax_results_render.get("calculated_column", "Not provided or error."), language="dax")
+                    elif item_detail_data['type'] == 'expression': 
                         st.code("No expression available for this column.", language="text")
-                        
                     st.write("**Base columns (from SQL Lineage):**")
-                    if item.get('base_columns'):
-                        for col in item['base_columns']:
-                            st.write(f"- `{col}`")
+                    if item_detail_data.get('base_columns'):
+                        for col_detail in item_detail_data['base_columns']:
+                            st.write(f"- `{col_detail}`")
                     else:
                         st.write("N/A (Direct column or no base columns identified by lineage analyzer)")
-
-                    # --- PBI Mapping for individual base columns (Detail) ---
                     st.markdown("---") 
                     st.write("**PBI Mapping for Individual Base Columns:**")
-                    if not item.get('base_columns'):
+                    if not item_detail_data.get('base_columns'):
                         st.caption("No base columns to show individual PBI mappings for.")
                     elif not st.session_state.get('column_mappings'):
                         st.warning("Mapping file not loaded. PBI mappings cannot be displayed.")
                     else:
-                        for base_col_idx, base_col_str in enumerate(item['base_columns']):
-                            norm_base_col = normalize_column_identifier(base_col_str)
-                            st.markdown(f"  - **Base Column {base_col_idx+1}:** `{base_col_str}` <br>&nbsp;&nbsp;&nbsp;&nbsp;Normalized: `{norm_base_col}`", unsafe_allow_html=True)
-                            
-                            pbi_matches_for_this_base_col = find_matching_powerbi_columns(base_col_str, st.session_state['column_mappings'])
-                            
-                            if pbi_matches_for_this_base_col:
-                                for match_idx, match_info in enumerate(pbi_matches_for_this_base_col):
-                                    pbi_table_name = match_info.get('table', 'N/A')
-                                    pbi_col_name = match_info.get('column', 'N/A')
-                                    dax_ref_display = f"'{pbi_table_name}'[{pbi_col_name}]" if pbi_table_name != 'N/A' else "N/A"
-
+                        for base_col_idx_detail, base_col_str_detail in enumerate(item_detail_data['base_columns']):
+                            norm_base_col_detail = normalize_column_identifier(base_col_str_detail)
+                            st.markdown(f"  - **Base Column {base_col_idx_detail+1}:** `{base_col_str_detail}` <br>&nbsp;&nbsp;&nbsp;&nbsp;Normalized: `{norm_base_col_detail}`", unsafe_allow_html=True)
+                            pbi_matches_for_this_base_col_detail = find_matching_powerbi_columns(base_col_str_detail, st.session_state['column_mappings'])
+                            if pbi_matches_for_this_base_col_detail:
+                                for match_idx_detail, match_info_detail in enumerate(pbi_matches_for_this_base_col_detail):
+                                    pbi_table_name_detail = match_info_detail.get('table', 'N/A')
+                                    pbi_col_name_detail = match_info_detail.get('column', 'N/A')
+                                    dax_ref_display_detail = f"'{pbi_table_name_detail}'[{pbi_col_name_detail}]" if pbi_table_name_detail != 'N/A' else "N/A"
                                     st.markdown(f"""
-                                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- PBI Target {match_idx+1}: `{match_info.get('powerbi_column', 'N/A')}` (DAX: `{dax_ref_display}`)
-                                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- Table: `{pbi_table_name}`
-                                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- Column: `{pbi_col_name}`
-                                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- (Source DB in Mapping: `{match_info.get('db_column', 'N/A')}`)
+                                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- PBI Target {match_idx_detail+1}: `{match_info_detail.get('powerbi_column', 'N/A')}` (DAX: `{dax_ref_display_detail}`)
+                                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- Table: `{pbi_table_name_detail}`
+                                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- Column: `{pbi_col_name_detail}`
+                                        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- (Source DB in Mapping: `{match_info_detail.get('db_column', 'N/A')}`)
                                     """, unsafe_allow_html=True)
                             else:
                                 st.markdown(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- *No PowerBI mapping found for this base column.*", unsafe_allow_html=True)
-                            st.markdown("<br>", unsafe_allow_html=True) # Space between base columns
-        
-        with tab3: # PBI Mapping Tab
+                            st.markdown("<br>", unsafe_allow_html=True) 
+        with tab3: 
             st.header("Consolidated Power BI Column Mappings")
             if not st.session_state.get('column_mappings'):
                 st.warning("Mapping file not loaded. Please check sidebar and console for errors.")
             elif not st.session_state.get('mapping_results'):
                 st.info("No SQL query analyzed yet, or the query resulted in no columns to map.")
             else:
-                mapping_filter = st.radio(
+                mapping_filter_tab3 = st.radio( 
                     "Show SQL Columns:",
                     ["All", "Mapped Only", "Unmapped Only"],
                     horizontal=True,
-                    key="pbi_mapping_tab_filter"
+                    key="pbi_mapping_tab_filter_tab3"
                 )
-
-                mapping_data_for_tab = st.session_state['mapping_results']
-                
-                total_sql_cols = len(mapping_data_for_tab)
-                mapped_sql_cols_count = sum(1 for data in mapping_data_for_tab.values() if data.get("is_mapped_overall"))
-                unmapped_sql_cols_count = total_sql_cols - mapped_sql_cols_count
-
-                m_col1, m_col2, m_col3 = st.columns(3)
-                m_col1.metric("Total SQL Columns", total_sql_cols)
-                m_col2.metric("Mapped SQL Columns", mapped_sql_cols_count)
-                m_col3.metric("Unmapped SQL Columns", unmapped_sql_cols_count)
-
-                export_rows = []
-
-                for sql_col_name, data in mapping_data_for_tab.items():
-                    is_overall_mapped = data.get("is_mapped_overall", False)
-                    
-                    display_this_sql_col = False
-                    if mapping_filter == "All":
-                        display_this_sql_col = True
-                    elif mapping_filter == "Mapped Only" and is_overall_mapped:
-                        display_this_sql_col = True
-                    elif mapping_filter == "Unmapped Only" and not is_overall_mapped:
-                        display_this_sql_col = True
-                    
-                    if display_this_sql_col:
-                        expander_title = f"SQL Column: {sql_col_name} ({data['type']})"
-                        expander_title += " ✅ (Mapped)" if is_overall_mapped else " ❌ (Unmapped)"
-                        
-                        with st.expander(expander_title):
-                            if not data["base_column_mappings"]:
+                mapping_data_for_tab3 = st.session_state['mapping_results']
+                total_sql_cols_tab3 = len(mapping_data_for_tab3)
+                mapped_sql_cols_count_tab3 = sum(1 for data_tab3 in mapping_data_for_tab3.values() if data_tab3.get("is_mapped_overall"))
+                unmapped_sql_cols_count_tab3 = total_sql_cols_tab3 - mapped_sql_cols_count_tab3
+                m_col1_tab3, m_col2_tab3, m_col3_tab3 = st.columns(3)
+                m_col1_tab3.metric("Total SQL Columns", total_sql_cols_tab3)
+                m_col2_tab3.metric("Mapped SQL Columns", mapped_sql_cols_count_tab3)
+                m_col3_tab3.metric("Unmapped SQL Columns", unmapped_sql_cols_count_tab3)
+                export_rows_tab3 = []
+                for sql_col_name_tab3, data_val_tab3 in mapping_data_for_tab3.items(): 
+                    is_overall_mapped_tab3 = data_val_tab3.get("is_mapped_overall", False)
+                    display_this_sql_col_tab3 = False
+                    if mapping_filter_tab3 == "All":
+                        display_this_sql_col_tab3 = True
+                    elif mapping_filter_tab3 == "Mapped Only" and is_overall_mapped_tab3:
+                        display_this_sql_col_tab3 = True
+                    elif mapping_filter_tab3 == "Unmapped Only" and not is_overall_mapped_tab3:
+                        display_this_sql_col_tab3 = True
+                    if display_this_sql_col_tab3:
+                        expander_title_tab3 = f"SQL Column: {sql_col_name_tab3} ({data_val_tab3['type']})"
+                        expander_title_tab3 += " ✅ (Mapped)" if is_overall_mapped_tab3 else " ❌ (Unmapped)"
+                        with st.expander(expander_title_tab3):
+                            if not data_val_tab3["base_column_mappings"]:
                                 st.caption("This SQL column has no identified base columns.")
-                            
-                            has_at_least_one_pbi_mapping_shown_in_expander = False
-                            for base_map_info in data["base_column_mappings"]:
-                                st.markdown(f"  - **Base:** `{base_map_info['original_base_col']}` (Normalized: `{base_map_info['normalized_base_col']}`)")
-                                if base_map_info["pbi_matches"]:
-                                    has_at_least_one_pbi_mapping_shown_in_expander = True
-                                    for pbi_match_idx, pbi_match in enumerate(base_map_info["pbi_matches"]):
-                                        pbi_table_name_tab3 = pbi_match.get('table', 'N/A')
-                                        pbi_col_name_tab3 = pbi_match.get('column', 'N/A')
-                                        dax_ref_tab3 = f"'{pbi_table_name_tab3}'[{pbi_col_name_tab3}]" if pbi_table_name_tab3 != 'N/A' else "N/A"
-                                        
-                                        st.markdown(f"    - PBI Target {pbi_match_idx+1}: `{pbi_match.get('powerbi_column','N/A')}` (DAX: `{dax_ref_tab3}`)")
-                                        st.markdown(f"      (Source DB in Mapping: `{pbi_match.get('db_column','N/A')}`)")
-                                        export_rows.append({
-                                            "SQL Output Column": sql_col_name,
-                                            "SQL Column Type": data['type'],
-                                            "SQL Base Column": base_map_info['original_base_col'],
-                                            "Normalized SQL Base Column": base_map_info['normalized_base_col'],
-                                            "Mapped PBI Column Full Path": pbi_match.get('powerbi_column','N/A'),
-                                            "PBI Table": pbi_table_name_tab3,
-                                            "PBI Column Name": pbi_col_name_tab3,
-                                            "PBI DAX Reference": dax_ref_tab3,
-                                            "Source DB in Mapping File": pbi_match.get('db_column','N/A')
+                            has_at_least_one_pbi_mapping_shown_in_expander_tab3 = False
+                            for base_map_info_tab3 in data_val_tab3["base_column_mappings"]:
+                                st.markdown(f"  - **Base:** `{base_map_info_tab3['original_base_col']}` (Normalized: `{base_map_info_tab3['normalized_base_col']}`)")
+                                if base_map_info_tab3["pbi_matches"]:
+                                    has_at_least_one_pbi_mapping_shown_in_expander_tab3 = True
+                                    for pbi_match_idx_tab3, pbi_match_data_tab3 in enumerate(base_map_info_tab3["pbi_matches"]): 
+                                        pbi_table_name_render_tab3 = pbi_match_data_tab3.get('table', 'N/A') 
+                                        pbi_col_name_render_tab3 = pbi_match_data_tab3.get('column', 'N/A') 
+                                        dax_ref_render_tab3 = f"'{pbi_table_name_render_tab3}'[{pbi_col_name_render_tab3}]" if pbi_table_name_render_tab3 != 'N/A' else "N/A"
+                                        st.markdown(f"    - PBI Target {pbi_match_idx_tab3+1}: `{pbi_match_data_tab3.get('powerbi_column','N/A')}` (DAX: `{dax_ref_render_tab3}`)")
+                                        st.markdown(f"      (Source DB in Mapping: `{pbi_match_data_tab3.get('db_column','N/A')}`)")
+                                        export_rows_tab3.append({
+                                            "SQL Output Column": sql_col_name_tab3, "SQL Column Type": data_val_tab3['type'],
+                                            "SQL Base Column": base_map_info_tab3['original_base_col'], "Normalized SQL Base Column": base_map_info_tab3['normalized_base_col'],
+                                            "Mapped PBI Column Full Path": pbi_match_data_tab3.get('powerbi_column','N/A'), "PBI Table": pbi_table_name_render_tab3,
+                                            "PBI Column Name": pbi_col_name_render_tab3, "PBI DAX Reference": dax_ref_render_tab3,
+                                            "Source DB in Mapping File": pbi_match_data_tab3.get('db_column','N/A')
                                         })
                                 else:
                                     st.markdown("    - *No PowerBI mapping found for this base column.*")
-                                    export_rows.append({ 
-                                        "SQL Output Column": sql_col_name,
-                                        "SQL Column Type": data['type'],
-                                        "SQL Base Column": base_map_info['original_base_col'],
-                                        "Normalized SQL Base Column": base_map_info['normalized_base_col'],
-                                        "Mapped PBI Column Full Path": "N/A",
-                                        "PBI Table": "N/A",
-                                        "PBI Column Name": "N/A",
-                                        "PBI DAX Reference": "N/A",
+                                    export_rows_tab3.append({ 
+                                        "SQL Output Column": sql_col_name_tab3, "SQL Column Type": data_val_tab3['type'],
+                                        "SQL Base Column": base_map_info_tab3['original_base_col'], "Normalized SQL Base Column": base_map_info_tab3['normalized_base_col'],
+                                        "Mapped PBI Column Full Path": "N/A", "PBI Table": "N/A", "PBI Column Name": "N/A", "PBI DAX Reference": "N/A",
                                         "Source DB in Mapping File": "N/A"
                                     })
-                            if not data["base_column_mappings"]: # If SQL col has no base columns for lineage
-                                 export_rows.append({
-                                    "SQL Output Column": sql_col_name,
-                                    "SQL Column Type": data['type'],
-                                    "SQL Base Column": "N/A (No base columns from lineage)",
-                                    "Normalized SQL Base Column": "N/A",
-                                    "Mapped PBI Column Full Path": "N/A",
-                                    "PBI Table": "N/A",
-                                    "PBI Column Name": "N/A",
-                                    "PBI DAX Reference": "N/A",
+                            if not data_val_tab3["base_column_mappings"]: 
+                                 export_rows_tab3.append({
+                                    "SQL Output Column": sql_col_name_tab3, "SQL Column Type": data_val_tab3['type'],
+                                    "SQL Base Column": "N/A (No base columns from lineage)", "Normalized SQL Base Column": "N/A",
+                                    "Mapped PBI Column Full Path": "N/A", "PBI Table": "N/A", "PBI Column Name": "N/A", "PBI DAX Reference": "N/A",
                                     "Source DB in Mapping File": "N/A"
                                 })
-
-                            if not has_at_least_one_pbi_mapping_shown_in_expander and data["base_column_mappings"]:
+                            if not has_at_least_one_pbi_mapping_shown_in_expander_tab3 and data_val_tab3["base_column_mappings"]:
                                 st.info("Although this SQL column has base columns, none of them mapped to any Power BI columns.")
-                
-                if export_rows:
-                    export_df = pd.DataFrame(export_rows)
-                    csv_export = export_df.to_csv(index=False).encode('utf-8')
+                if export_rows_tab3:
+                    export_df_tab3 = pd.DataFrame(export_rows_tab3)
+                    csv_export_tab3 = export_df_tab3.to_csv(index=False).encode('utf-8')
                     st.download_button(
-                        label="Download All Mappings (CSV)",
-                        data=csv_export,
-                        file_name="pbi_column_mapping_details.csv",
-                        mime="text/csv",
-                        key="export_all_mappings_button_tab3" # Ensure unique key
+                        label="Download All Mappings (CSV)", data=csv_export_tab3,
+                        file_name="pbi_column_mapping_details.csv", mime="text/csv",
+                        key="export_all_mappings_button_tab3_vis" 
                     )
-                elif mapping_data_for_tab : 
+                elif mapping_data_for_tab3 : 
                     st.caption("No mappings to display based on the current filter. Try 'All'.")
-
-        with tab4: # Raw JSON view
+        with tab4: 
             st.json(st.session_state['lineage_data'])
-    
+
+    # --- New Section: Visual Configuration ---
+    if st.session_state['lineage_data'] and st.session_state['visual_config_candidates']:
+        st.markdown("---")
+        st.subheader("Visual Configuration")
+
+        st.session_state['visual_type'] = st.radio(
+            "Select Visual Type:",
+            ["Matrix", "Table"],
+            index=["Matrix", "Table"].index(st.session_state['visual_type']),
+            key="visual_type_selector"
+        )
+
+        current_visual_config_candidates = [dict(candidate) for candidate in st.session_state['visual_config_candidates']]
+        rerun_for_ambiguity_update = False
+        
+        for idx, candidate in enumerate(current_visual_config_candidates):
+            if len(candidate['pbi_options']) > 1:
+                current_choice_for_sql_name = st.session_state['visual_ambiguity_choices'].get(candidate['sql_name'])
+                # Check if current choice is still valid among the options
+                valid_current_choice = False
+                if current_choice_for_sql_name:
+                    if any(opt['display_label'] == current_choice_for_sql_name for opt in candidate['pbi_options']):
+                        valid_current_choice = True
+                
+                if not valid_current_choice: # Prompt or re-prompt if choice is not set or invalid
+                    st.markdown(f"**Choose PBI Representation for SQL Column/Expression:** `{candidate['sql_name']}`")
+                    options_display_labels = [opt['display_label'] for opt in candidate['pbi_options']]
+                    
+                    default_index = 0
+                    if current_choice_for_sql_name and current_choice_for_sql_name in options_display_labels: # Should not happen if !valid_current_choice
+                        default_index = options_display_labels.index(current_choice_for_sql_name)
+                    
+                    chosen_display_label = st.radio(
+                        f"Select PBI item for '{candidate['sql_name']}':",
+                        options_display_labels,
+                        index=default_index,
+                        key=f"ambiguity_choice_{candidate['id']}"
+                    )
+                    
+                    # Find the corresponding pbi_dax_reference for the chosen_display_label
+                    chosen_option_dict = next((opt for opt in candidate['pbi_options'] if opt['display_label'] == chosen_display_label), None)
+                    if chosen_option_dict:
+                        st.session_state['visual_ambiguity_choices'][candidate['sql_name']] = chosen_display_label
+                        current_visual_config_candidates[idx]['chosen_display_label'] = chosen_display_label
+                        current_visual_config_candidates[idx]['chosen_pbi_dax_reference'] = chosen_option_dict['pbi_dax_reference']
+                        rerun_for_ambiguity_update = True 
+                else: # Choice already exists and is valid, ensure candidate reflects it
+                    chosen_option_dict = next((opt for opt in candidate['pbi_options'] if opt['display_label'] == current_choice_for_sql_name), None)
+                    if chosen_option_dict:
+                        current_visual_config_candidates[idx]['chosen_display_label'] = chosen_option_dict['display_label']
+                        current_visual_config_candidates[idx]['chosen_pbi_dax_reference'] = chosen_option_dict['pbi_dax_reference']
+
+            elif candidate['pbi_options']: # Only one option, no ambiguity
+                current_visual_config_candidates[idx]['chosen_display_label'] = candidate['pbi_options'][0]['display_label']
+                current_visual_config_candidates[idx]['chosen_pbi_dax_reference'] = candidate['pbi_options'][0]['pbi_dax_reference']
+            else: # No PBI options
+                 current_visual_config_candidates[idx]['chosen_display_label'] = None
+                 current_visual_config_candidates[idx]['chosen_pbi_dax_reference'] = None
+        
+        st.session_state['visual_config_candidates'] = current_visual_config_candidates
+        
+        if rerun_for_ambiguity_update:
+            st.rerun()
+
+        all_available_display_labels_for_visual = sorted(list(set(
+            candidate['chosen_display_label'] 
+            for candidate in st.session_state['visual_config_candidates'] 
+            if candidate.get('chosen_display_label')
+        )))
+
+        if st.session_state['visual_type'] == "Matrix":
+            st.markdown("#### Configure Matrix Visual")
+            options_for_rows = [
+                item for item in all_available_display_labels_for_visual 
+                if item not in st.session_state.get('visual_selected_columns', []) and \
+                   item not in st.session_state.get('visual_selected_values', [])
+            ]
+            current_selected_rows = [r for r in st.session_state.get('visual_selected_rows', []) if r in options_for_rows]
+            new_selected_rows = st.multiselect(
+                "Rows:", options_for_rows, default=current_selected_rows, key="matrix_rows"
+            )
+            if new_selected_rows != st.session_state.get('visual_selected_rows', []):
+                st.session_state['visual_selected_rows'] = new_selected_rows
+                st.rerun()
+
+            options_for_columns = [
+                item for item in all_available_display_labels_for_visual 
+                if item not in st.session_state.get('visual_selected_rows', []) and \
+                   item not in st.session_state.get('visual_selected_values', [])
+            ]
+            current_selected_columns = [c for c in st.session_state.get('visual_selected_columns', []) if c in options_for_columns]
+            new_selected_columns = st.multiselect(
+                "Columns:", options_for_columns, default=current_selected_columns, key="matrix_columns"
+            )
+            if new_selected_columns != st.session_state.get('visual_selected_columns', []):
+                st.session_state['visual_selected_columns'] = new_selected_columns
+                st.rerun()
+
+            options_for_values = [
+                item for item in all_available_display_labels_for_visual 
+                if item not in st.session_state.get('visual_selected_rows', []) and \
+                   item not in st.session_state.get('visual_selected_columns', [])
+            ]
+            current_selected_values = [v for v in st.session_state.get('visual_selected_values', []) if v in options_for_values]
+            new_selected_values = st.multiselect(
+                "Values:", options_for_values, default=current_selected_values, key="matrix_values"
+            )
+            if new_selected_values != st.session_state.get('visual_selected_values', []):
+                st.session_state['visual_selected_values'] = new_selected_values
+                st.rerun()
+
+            st.write("Current Matrix Configuration (Display Labels):")
+            st.write("Rows:", st.session_state.get('visual_selected_rows', []))
+            st.write("Columns:", st.session_state.get('visual_selected_columns', []))
+            st.write("Values:", st.session_state.get('visual_selected_values', []))
+
+            # For debugging: show the actual DAX references for selected items
+            # selected_rows_dax = [next((c['chosen_pbi_dax_reference'] for c in st.session_state['visual_config_candidates'] if c['chosen_display_label'] == row_label), None) for row_label in st.session_state.get('visual_selected_rows', [])]
+            # selected_cols_dax = [next((c['chosen_pbi_dax_reference'] for c in st.session_state['visual_config_candidates'] if c['chosen_display_label'] == col_label), None) for col_label in st.session_state.get('visual_selected_columns', [])]
+            # selected_vals_dax = [next((c['chosen_pbi_dax_reference'] for c in st.session_state['visual_config_candidates'] if c['chosen_display_label'] == val_label), None) for val_label in st.session_state.get('visual_selected_values', [])]
+            # st.write("Actual DAX for Rows:", selected_rows_dax)
+            # st.write("Actual DAX for Columns:", selected_cols_dax)
+            # st.write("Actual DAX for Values:", selected_vals_dax)
+
+
+        elif st.session_state['visual_type'] == "Table":
+            st.markdown("#### Configure Table Visual")
+            st.info("Table visual configuration will be implemented later.")
+
     elif analyze_button and not sql_query.strip():
         st.warning("Please enter a SQL query")
 
