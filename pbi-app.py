@@ -6,6 +6,21 @@ import google.generativeai as genai
 import os
 import re
 from pathlib import Path
+import yaml # For YAML processing
+from io import StringIO
+
+
+
+class FlowDict(dict):
+    pass
+
+def flow_dict_representer(dumper, data):
+    return dumper.represent_mapping(dumper.DEFAULT_MAPPING_TAG, data, flow_style=True)
+
+class CustomDumper(yaml.SafeDumper):
+    pass
+
+CustomDumper.add_representer(FlowDict, flow_dict_representer)
 
 # Import the analyzer from main.py
 from main import SQLLineageAnalyzer
@@ -197,11 +212,17 @@ def generate_powerbi_equivalent_formula(original_sql_expression, base_columns_fr
 def generate_dax_from_sql(sql_expression):
     try:
         model = genai.GenerativeModel('gemini-2.5-flash-preview-05-20')
+        # Define the allowed data types for the prompt
+        data_type_options = [
+            "text", "whole number", "decimal number", "date/time", 
+            "date", "time", "true/false", "fixed decimal number", "binary"
+        ]
         prompt = f"""
         Analyze the following SQL expression and provide:
-        1. An equivalent PowerBI DAX expression for a MEASURE (properly formatted with line breaks and indentation for readability)
-        2. An equivalent PowerBI DAX expression for a CALCULATED COLUMN (properly formatted with line breaks and indentation for readability)   
-        3. A recommendation on whether this should be implemented as a measure or calculated column in PowerBI based on its characteristics     
+        1. An equivalent PowerBI DAX expression for a MEASURE (properly formatted with line breaks and indentation for readability, don't give name to the measure, only show expression)
+        2. An equivalent PowerBI DAX expression for a CALCULATED COLUMN (properly formatted with line breaks and indentation for readability, don't give name to the calculated column only show expression)
+        3. A recommendation on whether this should be implemented as a measure or calculated column in PowerBI based on its characteristics
+        4. A suitable Power BI DATA TYPE for the MEASURE. Choose one from the following list: {', '.join(data_type_options)}.
 
         SQL Expression:
         ```sql
@@ -221,62 +242,78 @@ def generate_dax_from_sql(sql_expression):
             "Standard"
         )
         RECOMMENDATION: measure
+        DATA_TYPE: decimal number
         """
 
         response = model.generate_content(prompt)
-
-        # Clean up response to remove markdown formatting
         dax_response = response.text.strip()
 
-        # Extract the different sections using more sophisticated parsing
-        sections = {'measure': '', 'calculated_column': '', 'recommendation': ''}
+        sections = {
+            'measure': '',
+            'calculated_column': '',
+            'recommendation': '',
+            'dataType': 'text'  # Default dataType
+        }
 
-        # Split by sections markers
-        parts = dax_response.split('MEASURE:')
-        if len(parts) > 1:
-            rest = parts[1]
+        measure_marker = "MEASURE:"
+        calc_col_marker = "CALCULATED_COLUMN:"
+        rec_marker = "RECOMMENDATION:"
+        datatype_marker = "DATA_TYPE:" # Changed from FORMAT_STRING
 
-            # Get CALCULATED_COLUMN section
-            calc_parts = rest.split('CALCULATED_COLUMN:')
-            if len(calc_parts) > 1:
-                sections['measure'] = calc_parts[0].strip()
-                rest = calc_parts[1]
+        idx_measure = dax_response.find(measure_marker)
+        idx_calc_col = dax_response.find(calc_col_marker)
+        idx_rec = dax_response.find(rec_marker)
+        idx_datatype = dax_response.find(datatype_marker) # Changed
 
-                # Get RECOMMENDATION section
-                rec_parts = rest.split('RECOMMENDATION:')
-                if len(rec_parts) > 1:
-                    sections['calculated_column'] = rec_parts[0].strip()
-                    sections['recommendation'] = rec_parts[1].strip()
-                else:
-                    sections['calculated_column'] = rest.strip()
+        if idx_measure != -1:
+            start_measure = idx_measure + len(measure_marker)
+            end_measure = idx_calc_col if idx_calc_col != -1 else (idx_rec if idx_rec != -1 else (idx_datatype if idx_datatype != -1 else len(dax_response)))
+            sections['measure'] = dax_response[start_measure:end_measure].strip()
 
-        # Clean up any markdown formatting in the sections
+        if idx_calc_col != -1:
+            start_calc_col = idx_calc_col + len(calc_col_marker)
+            end_calc_col = idx_rec if idx_rec != -1 else (idx_datatype if idx_datatype != -1 else len(dax_response))
+            sections['calculated_column'] = dax_response[start_calc_col:end_calc_col].strip()
+
+        if idx_rec != -1:
+            start_rec = idx_rec + len(rec_marker)
+            end_rec = idx_datatype if idx_datatype != -1 else len(dax_response)
+            sections['recommendation'] = dax_response[start_rec:end_rec].strip()
+        
+        if idx_datatype != -1: # Changed
+            start_datatype = idx_datatype + len(datatype_marker) # Changed
+            sections['dataType'] = dax_response[start_datatype:].strip() # Changed
+
+        # Clean up measure and calculated_column DAX
         for key in ['measure', 'calculated_column']:
-            # Remove code block markers
             sections[key] = sections[key].replace('```dax', '').replace('```', '')
-
-            # Remove language identifier if it appears at the beginning
             if sections[key].lstrip().startswith('dax'):
                 sections[key] = sections[key].lstrip()[3:].lstrip()
-
             if sections[key].lstrip().startswith('DAX'):
                 sections[key] = sections[key].lstrip()[3:].lstrip()
-
-            # Remove any trailing backticks
             sections[key] = sections[key].rstrip('`').strip()
+        
+        # Clean up dataType (remove potential quotes and validate against allowed list)
+        dt = sections['dataType']
+        if dt.startswith('"') and dt.endswith('"'):
+            dt = dt[1:-1]
+        if dt.startswith("'") and dt.endswith("'"):
+            dt = dt[1:-1]
+        
+        if dt.lower() not in data_type_options: # Validate
+            sections['dataType'] = 'text' # Fallback to default if AI gives invalid type
+        else:
+            sections['dataType'] = dt.lower() # Store in lowercase for consistency
 
-        return {
-            "measure": sections['measure'],
-            "calculated_column": sections['calculated_column'],
-            "recommendation": sections['recommendation']
-        }
+        return sections
     except Exception as e:
         return {
             "measure": f"Error: {str(e)}",
             "calculated_column": f"Error: {str(e)}",
-            "recommendation": "error"
+            "recommendation": "error",
+            "dataType": "text" # Default dataType on error
         }
-
+    
 
 
 # --- Rebuild visual_config_candidates if any ambiguity choice changed ---
@@ -1088,13 +1125,13 @@ def main():
                             label = item_to_process["label"]
                             pbi_expr = item_to_process["pbi_expression"]
                             category = item_to_process["category"]
-                            unique_key = f"{category}_{label}" # Create a unique key for session state
+                            unique_key = f"{category}_{label}"
 
-                            dax_results = generate_dax_from_sql(pbi_expr)
+                            dax_results = generate_dax_from_sql(pbi_expr) # dax_results now includes 'dataType'
                             st.session_state['visual_ai_dax_results'][unique_key] = {
                                 "label": label,
                                 "input_pbi_expression": pbi_expr,
-                                "ai_output": dax_results,
+                                "ai_output": dax_results, # This dictionary contains the dataType
                                 "category": category
                             }
                     overall_config_updated = False
@@ -1106,39 +1143,41 @@ def main():
                         if list_key_str in st.session_state:
                             current_list_in_state = st.session_state[list_key_str]
                             for item_dict_idx in range(len(current_list_in_state)):
-                                # item_dict is a reference to the dictionary in the session state list
-                                item_dict = current_list_in_state[item_dict_idx] 
-                                
+                                item_dict = current_list_in_state[item_dict_idx]
+
                                 if item_dict.get("type") == "expression":
                                     ai_result_lookup_key = f"{category_name_str}_{item_dict['label']}"
-                                    
-                                    # Check if this item had AI DAX before
+
                                     had_previous_ai_dax = "ai_generated_dax" in item_dict
                                     current_item_modified = False
 
                                     if ai_result_lookup_key in st.session_state['visual_ai_dax_results']:
                                         ai_result_data = st.session_state['visual_ai_dax_results'][ai_result_lookup_key]
-                                        ai_output_data = ai_result_data['ai_output']
+                                        ai_output_data = ai_result_data['ai_output'] 
                                         recommendation_data = ai_output_data.get("recommendation", "").lower()
-                                        
+
                                         if "measure" in recommendation_data:
                                             measure_dax_from_ai = ai_output_data.get("measure")
-                                            # Add/update if a valid measure DAX is found
+                                            data_type_from_ai = ai_output_data.get("dataType", "text") # Get dataType
+
                                             if measure_dax_from_ai and not measure_dax_from_ai.startswith("Error:") and measure_dax_from_ai != "Not provided or error.":
                                                 item_dict["ai_generated_dax"] = measure_dax_from_ai
+                                                item_dict["ai_dataType"] = data_type_from_ai # Store dataType
                                                 current_item_modified = True
-                                    
-                                    # If no valid measure was generated this time, but an old AI DAX existed, remove it
+
                                     if not current_item_modified and had_previous_ai_dax:
-                                        del item_dict["ai_generated_dax"]
-                                        current_item_modified = True # A modification (removal) happened
-                                    
+                                        if "ai_generated_dax" in item_dict:
+                                            del item_dict["ai_generated_dax"]
+                                        if "ai_dataType" in item_dict: # Also remove dataType if DAX is removed
+                                            del item_dict["ai_dataType"]
+                                        current_item_modified = True
+
                                     if current_item_modified:
                                         overall_config_updated = True
-                                        
+
                     st.success(f"AI DAX generation complete for {len(st.session_state['visual_ai_dax_results'])} items.")
                     if overall_config_updated:
-                        st.rerun() # Rerun to reflect changes in "Current Matrix Configuration" display
+                        st.rerun()
             
             # Display generated DAX results
             if st.session_state['visual_ai_dax_results']:
@@ -1163,10 +1202,183 @@ def main():
                     st.markdown("---")
 
 
-
         elif st.session_state['visual_type'] == "Table":
             st.markdown("#### Configure Table Visual")
             st.info("Table visual configuration will be implemented later.")
+
+        st.markdown("---")
+        st.header("PBI Automation `config.yaml` Generation")
+
+        if st.button("Generate PBI Automation Config File"):
+            try:
+                new_config = {}
+
+                # --- Hardcoded Static Fields ---
+                new_config['projectName'] = "1.1.10.117. Daily Report Renault"
+                new_config['dataset'] = {
+                    "connection": {
+                        "connectionString": "Data Source=powerbi://api.powerbi.com/v1.0/myorg/EMEA Development;Initial Catalog=\"EU Order to Cash (Ad-hoc)\";Access Mode=readonly;Integrated Security=ClaimsToken",
+                        "database": "7f97f9b2-2c89-4359-966b-4612b960fbb1"
+                    },
+                    "modelName": "EU Order to Cash (Ad-Hoc)"
+                }
+                new_config['report'] = {
+                    'title': FlowDict({ # title can be FlowDict if it's simple
+                        "text": "1.1.10.117. Daily Report Renault"
+                    }),
+                    'data_refresh': FlowDict({ # data_refresh can be FlowDict
+                        "table": "Date Refresh Table",
+                        "column": "UPDATED_DATE"
+                    })
+                }
+
+                # --- Generate Measures (Dynamic) ---
+                generated_measures = []
+                all_selected_items_for_measures = (
+                    st.session_state.get('visual_selected_rows', []) +
+                    st.session_state.get('visual_selected_columns', []) +
+                    st.session_state.get('visual_selected_values', [])
+                )
+                processed_measure_labels = set()
+
+                for item in all_selected_items_for_measures:
+                    if item.get("type") == "expression" and item.get("ai_generated_dax") and item.get("label") not in processed_measure_labels:
+                        if item.get("pbi_table"):
+                            generated_measures.append(FlowDict({
+                                "name": item["label"] + " Measure", 
+                                "table": item["pbi_table"],
+                                "expression": item["ai_generated_dax"],
+                                "dataType": item.get("ai_dataType", "text") # Use stored AI dataType
+                            }))
+                            processed_measure_labels.add(item["label"])
+                        # ... (else warning)
+    
+                base_measures_from_example = [
+                    FlowDict({
+                        "name": "Current Year", "table": "Order To Cash (OTC)",
+                        "expression": "SELECTEDVALUE('Order To Cash (OTC)'[Year]) = YEAR(TODAY())",
+                        "dataType": "true/false" # Updated from formatString
+                    }),
+                    FlowDict({
+                        "name": "Current Month", "table": "Order To Cash (OTC)",
+                        "expression": "SELECTEDVALUE('Order To Cash (OTC)'[Month]) = Month(TODAY())",
+                        "dataType": "true/false" # Updated from formatString
+                    })
+                ]
+                new_config['report']['measures'] = base_measures_from_example + generated_measures
+
+                # --- Generate Visuals (Dynamic Rows/Cols/Values for the first Matrix) ---
+                matrix_visual_definition = { # This main visual dict remains standard (block)
+                    "type": "matrix",
+                    "position": FlowDict({ "x": 28.8, "y": 100, "width": 1220, "height": 400 }), # position is FlowDict
+                    "rows": [],
+                    "columns": [],
+                    "values": [],
+                    "filters": [ # Hardcoded filters, each item wrapped in FlowDict
+                        FlowDict({
+                            "field": FlowDict({ "name": "Company ID", "table": "Country", "type": "column" }),
+                            "filterType": "Categorical", "values": [ "E211" ]
+                        }),
+                        FlowDict({
+                            "field": FlowDict({ "name": "Distribution Channel Code", "table": "Distribution Channel", "type": "column" }),
+                            "filterType": "Categorical", "values": [ "01" ]
+                        }),
+                        FlowDict({
+                            "field": FlowDict({ "name": "PAK Hierarchy Level 1 Code", "table": "Product Aggregation Key (PAK)", "type": "column" }),
+                            "filterType": "Categorical", "values": [ "10" ]
+                        }),
+                        FlowDict({
+                            "field": FlowDict({ "name": "Year", "table": "Order To Cash (OTC)", "type": "Column" }),
+                            "filterType": "Categorical", "values": [ 2025 ] }),
+                        FlowDict({
+                            "field": FlowDict({ "name": "Month", "table": "Order To Cash (OTC)", "type": "Column" }),
+                            "filterType": "Categorical", "values": [ 6 ] }),
+                        FlowDict({
+                            "field": FlowDict({ "name": "Payer Hierarchy Level 4 ID", "table": "Payer Customer (Hierarchy)", "type": "column" }),
+                            "filterType": "Categorical", "values": [ "DE4RENZENT" ]
+                        })
+                    ]
+                }
+
+                for r_item in st.session_state.get('visual_selected_rows', []):
+                    item_data = {}
+                    if r_item.get("type") == "base":
+                        item_data = {
+                            "name": r_item.get("pbi_column", r_item["label"]),
+                            "table": r_item.get("pbi_table", "UnknownTable"),
+                            "type": "Column"
+                        }
+                    elif r_item.get("type") == "expression" and r_item.get("ai_generated_dax"):
+                        item_data = {
+                            "name": r_item["label"] + " Measure", # Ensure this matches the measure name in new_config['report']['measures']
+                            "table": r_item.get("pbi_table", "UnknownTable"),
+                            "type": "Measure"
+                        }
+                    if item_data:
+                        matrix_visual_definition['rows'].append(FlowDict(item_data))
+
+                # Populate Columns
+                for c_item in st.session_state.get('visual_selected_columns', []):
+                    item_data = {}
+                    if c_item.get("type") == "base":
+                        item_data = {
+                            "name": c_item.get("pbi_column", c_item["label"]),
+                            "table": c_item.get("pbi_table", "UnknownTable"),
+                            "type": "Column"
+                        }
+                    elif c_item.get("type") == "expression" and c_item.get("ai_generated_dax"):
+                        item_data = {
+                            "name": c_item["label"] + " Measure",
+                            "table": c_item.get("pbi_table", "UnknownTable"),
+                            "type": "Measure"
+                        }
+                    if item_data:
+                        matrix_visual_definition['columns'].append(FlowDict(item_data))
+
+                # Populate Values
+                for v_item in st.session_state.get('visual_selected_values', []):
+                    item_data = {}
+                    if v_item.get("type") == "base":
+                        item_data = {
+                            "name": v_item.get("pbi_column", v_item["label"]),
+                            "table": v_item.get("pbi_table", "UnknownTable"),
+                            "type": "Column"
+                        }
+                    elif v_item.get("type") == "expression" and v_item.get("ai_generated_dax"):
+                        item_data = {
+                            "name": v_item["label"] + " Measure",
+                            "table": v_item.get("pbi_table", "UnknownTable"),
+                            "type": "Measure"
+                        }
+                    if item_data:
+                        matrix_visual_definition['values'].append(FlowDict(item_data))
+
+                new_config['report']['visuals'] = [matrix_visual_definition]
+
+                # Convert Python dict to YAML string for display and download
+                yaml_string_io = StringIO()
+                yaml.dump(new_config, yaml_string_io, Dumper=CustomDumper, sort_keys=False, indent=2, allow_unicode=True)
+                generated_yaml_str = yaml_string_io.getvalue()
+
+                st.session_state['generated_pbi_config'] = generated_yaml_str.strip()
+                st.success("PBI Automation config.yaml generated successfully!")
+
+            except Exception as e:
+                st.error(f"An unexpected error occurred during config generation: {e}")
+                st.exception(e) 
+                st.session_state['generated_pbi_config'] = None
+    
+        if st.session_state.get('generated_pbi_config'):
+            st.subheader("Generated `config.yaml` Content")
+            st.code(st.session_state['generated_pbi_config'], language="yaml")
+            st.download_button(
+                label="Download Generated config.yaml",
+                data=st.session_state['generated_pbi_config'],
+                file_name="generated_config.yaml",
+                mime="text/yaml"
+            )
+
+
 
     elif analyze_button and not sql_query.strip():
         st.warning("Please enter a SQL query")
