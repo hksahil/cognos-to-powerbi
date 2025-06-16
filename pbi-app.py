@@ -8,6 +8,8 @@ import re
 from pathlib import Path
 import yaml # For YAML processing
 from io import StringIO
+import subprocess # For running external commands
+
 
 
 
@@ -1363,18 +1365,74 @@ def main():
                 st.session_state['generated_pbi_config'] = generated_yaml_str.strip()
                 st.success("PBI Automation config.yaml generated successfully!")
 
+                local_config_filename = "config.yaml" # Save in the same directory as pbi-app.py
+                app_dir = Path(__file__).parent # Get the directory of the current script (pbi-app.py)
+                local_config_path = app_dir / local_config_filename
+
+                with open(local_config_path, 'w', encoding='utf-8') as f:
+                    f.write(st.session_state['generated_pbi_config'])
+                st.info(f"Generated `config.yaml` saved locally to: {local_config_path}")
+
+                # Define the command to run PBI Automation
+                # Ensure paths are correct for your environment
+                pbi_automation_python_exe = r"C:\Users\NileshPhapale\Desktop\PBI Automation\.venv\Scripts\python.exe"
+                pbi_automation_main_script = r"C:\Users\NileshPhapale\Desktop\PBI Automation\main.py"
+                
+                # Command to execute. The --config argument will use the config.yaml in the PBI Automation script's CWD.
+                # We need to run the PBI Automation script from its own directory so it finds the config.yaml we place there.
+                
+                # Path to the PBI Automation directory
+                pbi_automation_dir = Path(pbi_automation_main_script).parent
+                # Path where the config file should be for the PBI automation script
+                pbi_automation_config_path = pbi_automation_dir / "config.yaml"
+
+                # Save the config file in the PBI Automation directory
+                with open(pbi_automation_config_path, 'w', encoding='utf-8') as f:
+                    f.write(st.session_state['generated_pbi_config'])
+                st.info(f"Copied `config.yaml` to PBI Automation directory: {pbi_automation_config_path}")
+
+                command_to_run = [
+                    pbi_automation_python_exe,
+                    pbi_automation_main_script,
+                    "--config", "config.yaml" # This will be relative to the PBI Automation script's CWD
+                ]
+
+                st.markdown("---")
+                st.subheader("Running PBI Automation Script...")
+                st.code(" ".join(command_to_run)) # Display the command being run
+
+                with st.spinner(f"Executing PBI Automation script from {pbi_automation_dir}..."):
+                    # Run the command from the PBI Automation script's directory
+                    process = subprocess.run(
+                        command_to_run,
+                        capture_output=True,
+                        text=True,
+                        cwd=pbi_automation_dir # Set the current working directory for the subprocess
+                    )
+                
+                st.markdown("#### PBI Automation Output:")
+                if process.stdout:
+                    st.text_area("Standard Output:", value=process.stdout, height=200, key="pbi_stdout")
+                if process.stderr:
+                    st.text_area("Standard Error (if any):", value=process.stderr, height=150, key="pbi_stderr")
+                
+                if process.returncode == 0:
+                    st.success("PBI Automation script executed successfully.")
+                else:
+                    st.error(f"PBI Automation script execution failed with return code: {process.returncode}")
+
             except Exception as e:
-                st.error(f"An unexpected error occurred during config generation: {e}")
+                st.error(f"An unexpected error occurred: {e}")
                 st.exception(e) 
-                st.session_state['generated_pbi_config'] = None
+                # st.session_state['generated_pbi_config'] = None # Already handled if generation fails
     
         if st.session_state.get('generated_pbi_config'):
-            st.subheader("Generated `config.yaml` Content")
+            st.subheader("Generated `config.yaml` Content (for review)") # Changed subheader slightly
             st.code(st.session_state['generated_pbi_config'], language="yaml")
             st.download_button(
                 label="Download Generated config.yaml",
                 data=st.session_state['generated_pbi_config'],
-                file_name="generated_config.yaml",
+                file_name="generated_config.yaml", # Keep this distinct from the one used by the script
                 mime="text/yaml"
             )
 
