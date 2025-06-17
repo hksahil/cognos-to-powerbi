@@ -279,6 +279,76 @@ def display_analysis_results_tabs():
             st.json(st.session_state['lineage_data'])
 
 
+def run_ai_dax_for_visual():
+    """Generate AI DAX for all selected expressions in the current visual and update session state."""
+    items_to_process_for_ai = []
+    visual_type = st.session_state.get('visual_type', 'Matrix')
+
+    if visual_type == "Matrix":
+        for category, selected_list_key in [
+            ("Row", 'visual_selected_rows'),
+            ("Column", 'visual_selected_columns'),
+            ("Value", 'visual_selected_values')
+        ]:
+            for item in st.session_state.get(selected_list_key, []):
+                if item.get("type") == "expression" and item.get("pbi_expression"):
+                    items_to_process_for_ai.append({
+                        "label": item["label"],
+                        "pbi_expression": item["pbi_expression"],
+                        "category": category
+                    })
+    elif visual_type == "Table":
+        for item in st.session_state.get('visual_selected_table_fields', []):
+            if item.get("type") == "expression" and item.get("pbi_expression"):
+                items_to_process_for_ai.append({
+                    "label": item["label"],
+                    "pbi_expression": item["pbi_expression"],
+                    "category": "TableField"
+                })
+
+    # Generate DAX for each item and update session state
+    for item in items_to_process_for_ai:
+        label = item["label"]
+        pbi_expr = item["pbi_expression"]
+        category = item["category"]
+        unique_key = f"{category}_{label}"
+        dax_results = generate_dax_from_sql(pbi_expr)
+        st.session_state.setdefault('visual_ai_dax_results', {})
+        st.session_state['visual_ai_dax_results'][unique_key] = {
+            "label": label,
+            "input_pbi_expression": pbi_expr,
+            "ai_output": dax_results,
+            "category": category
+        }
+
+    # Update selected items with AI DAX (for config generation)
+    if visual_type == "Matrix":
+        for list_key, category in [
+            ('visual_selected_rows', "Row"),
+            ('visual_selected_columns', "Column"),
+            ('visual_selected_values', "Value")
+        ]:
+            for item in st.session_state.get(list_key, []):
+                if item.get("type") == "expression":
+                    ai_key = f"{category}_{item['label']}"
+                    ai_result = st.session_state['visual_ai_dax_results'].get(ai_key)
+                    if ai_result:
+                        ai_output = ai_result['ai_output']
+                        if "measure" in ai_output.get("recommendation", "").lower():
+                            item["ai_generated_dax"] = ai_output.get("measure")
+                            item["ai_dataType"] = ai_output.get("dataType", "text")
+    elif visual_type == "Table":
+        for item in st.session_state.get('visual_selected_table_fields', []):
+            if item.get("type") == "expression":
+                ai_key = f"TableField_{item['label']}"
+                ai_result = st.session_state['visual_ai_dax_results'].get(ai_key)
+                if ai_result:
+                    ai_output = ai_result['ai_output']
+                    if "measure" in ai_output.get("recommendation", "").lower():
+                        item["ai_generated_dax"] = ai_output.get("measure")
+                        item["ai_dataType"] = ai_output.get("dataType", "text")
+
+
 
 def display_visual_configuration_section():
     """Handles the entire visual configuration UI and logic."""
@@ -466,118 +536,118 @@ def display_visual_configuration_section():
             else:
                 st.caption("No items selected for the matrix.")
             
-            st.markdown("---"); st.subheader("AI DAX Generation for Selected Matrix Items")
-            items_to_process_for_ai = []
-            for category, selected_list_key in [
-                ("Row", 'visual_selected_rows'), 
-                ("Column", 'visual_selected_columns'), 
-                ("Value", 'visual_selected_values')]:
-                if selected_list_key in st.session_state:
-                    for item_dict_ai in st.session_state[selected_list_key]:
-                        if item_dict_ai.get("type") == "expression" and item_dict_ai.get("pbi_expression"):
-                            items_to_process_for_ai.append({
-                                "label": item_dict_ai["label"],
-                                "pbi_expression": item_dict_ai["pbi_expression"],
-                                "category": category
-                            })
+            # st.markdown("---"); st.subheader("AI DAX Generation for Selected Matrix Items")
+            # items_to_process_for_ai = []
+            # for category, selected_list_key in [
+            #     ("Row", 'visual_selected_rows'), 
+            #     ("Column", 'visual_selected_columns'), 
+            #     ("Value", 'visual_selected_values')]:
+            #     if selected_list_key in st.session_state:
+            #         for item_dict_ai in st.session_state[selected_list_key]:
+            #             if item_dict_ai.get("type") == "expression" and item_dict_ai.get("pbi_expression"):
+            #                 items_to_process_for_ai.append({
+            #                     "label": item_dict_ai["label"],
+            #                     "pbi_expression": item_dict_ai["pbi_expression"],
+            #                     "category": category
+            #                 })
             
-            if not items_to_process_for_ai:
-                st.caption("No expressions selected in Rows, Columns, or Values to generate DAX for.")
+            # if not items_to_process_for_ai:
+            #     st.caption("No expressions selected in Rows, Columns, or Values to generate DAX for.")
             
-            if items_to_process_for_ai and st.button("Generate DAX with AI for Selected Matrix Items", key="ai_dax_matrix_btn_main"):
-                with st.spinner(f"Generating DAX for {len(items_to_process_for_ai)} expression(s)..."):
-                    for item_to_gen in items_to_process_for_ai:
-                        label = item_to_gen["label"]
-                        pbi_expr = item_to_gen["pbi_expression"]
-                        category = item_to_gen["category"]
-                        unique_key = f"{category}_{label}" # Consistent key
+            # if items_to_process_for_ai and st.button("Generate DAX with AI for Selected Matrix Items", key="ai_dax_matrix_btn_main"):
+            #     with st.spinner(f"Generating DAX for {len(items_to_process_for_ai)} expression(s)..."):
+            #         for item_to_gen in items_to_process_for_ai:
+            #             label = item_to_gen["label"]
+            #             pbi_expr = item_to_gen["pbi_expression"]
+            #             category = item_to_gen["category"]
+            #             unique_key = f"{category}_{label}" # Consistent key
 
-                        dax_results = generate_dax_from_sql(pbi_expr)
-                        st.session_state['visual_ai_dax_results'][unique_key] = {
-                            "label": label,
-                            "input_pbi_expression": pbi_expr,
-                            "ai_output": dax_results,
-                            "category": category
-                        }
+            #             dax_results = generate_dax_from_sql(pbi_expr)
+            #             st.session_state['visual_ai_dax_results'][unique_key] = {
+            #                 "label": label,
+            #                 "input_pbi_expression": pbi_expr,
+            #                 "ai_output": dax_results,
+            #                 "category": category
+            #             }
                 
-                # Logic to update the main selected items with AI DAX (measure recommendation)
-                overall_config_updated_by_ai = False
-                for list_key_str_ai, category_name_str_ai in [
-                    ('visual_selected_rows', "Row"),
-                    ('visual_selected_columns', "Column"),
-                    ('visual_selected_values', "Value")
-                ]:
-                    if list_key_str_ai in st.session_state:
-                        current_list_in_state_ai = st.session_state[list_key_str_ai]
-                        for item_dict_idx_ai in range(len(current_list_in_state_ai)):
-                            item_dict_ai_update = current_list_in_state_ai[item_dict_idx_ai]
-                            if item_dict_ai_update.get("type") == "expression":
-                                ai_result_lookup_key = f"{category_name_str_ai}_{item_dict_ai_update['label']}"
-                                had_previous_ai_dax = "ai_generated_dax" in item_dict_ai_update
-                                current_item_modified_by_ai = False
+            #     # Logic to update the main selected items with AI DAX (measure recommendation)
+            #     overall_config_updated_by_ai = False
+            #     for list_key_str_ai, category_name_str_ai in [
+            #         ('visual_selected_rows', "Row"),
+            #         ('visual_selected_columns', "Column"),
+            #         ('visual_selected_values', "Value")
+            #     ]:
+            #         if list_key_str_ai in st.session_state:
+            #             current_list_in_state_ai = st.session_state[list_key_str_ai]
+            #             for item_dict_idx_ai in range(len(current_list_in_state_ai)):
+            #                 item_dict_ai_update = current_list_in_state_ai[item_dict_idx_ai]
+            #                 if item_dict_ai_update.get("type") == "expression":
+            #                     ai_result_lookup_key = f"{category_name_str_ai}_{item_dict_ai_update['label']}"
+            #                     had_previous_ai_dax = "ai_generated_dax" in item_dict_ai_update
+            #                     current_item_modified_by_ai = False
 
-                                if ai_result_lookup_key in st.session_state['visual_ai_dax_results']:
-                                    ai_result_data = st.session_state['visual_ai_dax_results'][ai_result_lookup_key]
-                                    ai_output_data = ai_result_data['ai_output']
-                                    recommendation_data = ai_output_data.get("recommendation", "").lower()
+            #                     if ai_result_lookup_key in st.session_state['visual_ai_dax_results']:
+            #                         ai_result_data = st.session_state['visual_ai_dax_results'][ai_result_lookup_key]
+            #                         ai_output_data = ai_result_data['ai_output']
+            #                         recommendation_data = ai_output_data.get("recommendation", "").lower()
                                     
-                                    if "measure" in recommendation_data:
-                                        measure_dax_from_ai = ai_output_data.get("measure")
-                                        data_type_from_ai = ai_output_data.get("dataType", "text")
-                                        if measure_dax_from_ai and not measure_dax_from_ai.startswith("Error:") and measure_dax_from_ai != "Not provided or error.":
-                                            item_dict_ai_update["ai_generated_dax"] = measure_dax_from_ai
-                                            item_dict_ai_update["ai_dataType"] = data_type_from_ai
-                                            current_item_modified_by_ai = True
+            #                         if "measure" in recommendation_data:
+            #                             measure_dax_from_ai = ai_output_data.get("measure")
+            #                             data_type_from_ai = ai_output_data.get("dataType", "text")
+            #                             if measure_dax_from_ai and not measure_dax_from_ai.startswith("Error:") and measure_dax_from_ai != "Not provided or error.":
+            #                                 item_dict_ai_update["ai_generated_dax"] = measure_dax_from_ai
+            #                                 item_dict_ai_update["ai_dataType"] = data_type_from_ai
+            #                                 current_item_modified_by_ai = True
                                 
-                                if not current_item_modified_by_ai and had_previous_ai_dax:
-                                    if "ai_generated_dax" in item_dict_ai_update: del item_dict_ai_update["ai_generated_dax"]
-                                    if "ai_dataType" in item_dict_ai_update: del item_dict_ai_update["ai_dataType"]
-                                    current_item_modified_by_ai = True
+            #                     if not current_item_modified_by_ai and had_previous_ai_dax:
+            #                         if "ai_generated_dax" in item_dict_ai_update: del item_dict_ai_update["ai_generated_dax"]
+            #                         if "ai_dataType" in item_dict_ai_update: del item_dict_ai_update["ai_dataType"]
+            #                         current_item_modified_by_ai = True
                                 
-                                if current_item_modified_by_ai:
-                                    overall_config_updated_by_ai = True
+            #                     if current_item_modified_by_ai:
+            #                         overall_config_updated_by_ai = True
                 
-                st.success(f"AI DAX generation complete for {len(st.session_state['visual_ai_dax_results'])} items.")
-                if overall_config_updated_by_ai:
-                    st.rerun() # Rerun to reflect the ai_generated_dax in the config file generation
+            #     st.success(f"AI DAX generation complete for {len(st.session_state['visual_ai_dax_results'])} items.")
+            #     if overall_config_updated_by_ai:
+            #         st.rerun() # Rerun to reflect the ai_generated_dax in the config file generation
 
-            if st.session_state.get('visual_ai_dax_results'):
-                st.markdown("##### DAX Generation Results (for selected expressions):") # Changed
-                for unique_key_disp, result_data_disp in st.session_state['visual_ai_dax_results'].items():
-                    with st.expander(f"{result_data_disp['label']}"): # Changed
-                        st.write(f"**Input PBI Expression (Rule-Based):**")
-                        st.code(result_data_disp.get('input_pbi_expression', 'N/A'), language="dax")
+            # if st.session_state.get('visual_ai_dax_results'):
+            #     st.markdown("##### DAX Generation Results (for selected expressions):") # Changed
+            #     for unique_key_disp, result_data_disp in st.session_state['visual_ai_dax_results'].items():
+            #         with st.expander(f"{result_data_disp['label']}"): # Changed
+            #             st.write(f"**Input PBI Expression (Rule-Based):**")
+            #             st.code(result_data_disp.get('input_pbi_expression', 'N/A'), language="dax")
                         
-                        ai_output_disp = result_data_disp.get('ai_output', {}) # Internal variable name can remain
-                        recommendation_disp = ai_output_disp.get("recommendation", "").lower()
+            #             ai_output_disp = result_data_disp.get('ai_output', {}) # Internal variable name can remain
+            #             recommendation_disp = ai_output_disp.get("recommendation", "").lower()
                         
-                        if "measure" in recommendation_disp: # Prioritize if "measure" is in the recommendation string
-                            st.info("💡 **Recommendation:** **MEASURE**") # Changed
-                            st.write("**Generated DAX Measure:**") # Changed
-                            st.code(ai_output_disp.get("measure", "Not provided or error."), language="dax")
-                            st.write("**Suggested Data Type (for Measure):**") # Changed
-                            st.code(ai_output_disp.get("dataType", "text"), language="text")
-                        elif "calculated column" in recommendation_disp:
-                            st.info("💡 **Recommendation:** **CALCULATED COLUMN**") # Changed
-                            st.warning("Calculated Column is not directly used for visual measures. The generated DAX is for reference.") # Changed
-                            st.write("**Generated DAX Calculated Column (for reference):**") # Changed
-                            st.code(ai_output_disp.get("calculated_column", "Not provided or error."), language="dax")
-                        elif recommendation_disp and recommendation_disp != "error": # Other valid recommendations
-                            st.info(f"💡 **Recommendation:** {recommendation_disp.upper()}") # Changed
-                            st.write("**Generated DAX Measure:**") # Changed
-                            st.code(ai_output_disp.get("measure", "Not provided or error."), language="dax")
-                            st.write("**Generated DAX Calculated Column:**") # Changed
-                            st.code(ai_output_disp.get("calculated_column", "Not provided or error."), language="dax")
-                            st.write("**Suggested Data Type (for Measure):**") # Changed
-                            st.code(ai_output_disp.get("dataType", "text"), language="text")
-                        else: # Error or unknown recommendation
-                            st.error(f"Recommendation: {recommendation_disp if recommendation_disp else 'Not available'}") # Changed
-                            st.write("**Generated DAX Measure (Attempt):**") # Changed
-                            st.code(ai_output_disp.get("measure", "Not provided or error."), language="dax")
-                            st.write("**Generated DAX Calculated Column (Attempt):**") # Changed
-                            st.code(ai_output_disp.get("calculated_column", "Not provided or error."), language="dax")
-                            st.write("**Suggested Data Type (Attempt):**") # Changed
-                            st.code(ai_output_disp.get("dataType", "text"), language="text")
+            #             if "measure" in recommendation_disp: # Prioritize if "measure" is in the recommendation string
+            #                 st.info("💡 **Recommendation:** **MEASURE**") # Changed
+            #                 st.write("**Generated DAX Measure:**") # Changed
+            #                 st.code(ai_output_disp.get("measure", "Not provided or error."), language="dax")
+            #                 st.write("**Suggested Data Type (for Measure):**") # Changed
+            #                 st.code(ai_output_disp.get("dataType", "text"), language="text")
+            #             elif "calculated column" in recommendation_disp:
+            #                 st.info("💡 **Recommendation:** **CALCULATED COLUMN**") # Changed
+            #                 st.warning("Calculated Column is not directly used for visual measures. The generated DAX is for reference.") # Changed
+            #                 st.write("**Generated DAX Calculated Column (for reference):**") # Changed
+            #                 st.code(ai_output_disp.get("calculated_column", "Not provided or error."), language="dax")
+            #             elif recommendation_disp and recommendation_disp != "error": # Other valid recommendations
+            #                 st.info(f"💡 **Recommendation:** {recommendation_disp.upper()}") # Changed
+            #                 st.write("**Generated DAX Measure:**") # Changed
+            #                 st.code(ai_output_disp.get("measure", "Not provided or error."), language="dax")
+            #                 st.write("**Generated DAX Calculated Column:**") # Changed
+            #                 st.code(ai_output_disp.get("calculated_column", "Not provided or error."), language="dax")
+            #                 st.write("**Suggested Data Type (for Measure):**") # Changed
+            #                 st.code(ai_output_disp.get("dataType", "text"), language="text")
+            #             else: # Error or unknown recommendation
+            #                 st.error(f"Recommendation: {recommendation_disp if recommendation_disp else 'Not available'}") # Changed
+            #                 st.write("**Generated DAX Measure (Attempt):**") # Changed
+            #                 st.code(ai_output_disp.get("measure", "Not provided or error."), language="dax")
+            #                 st.write("**Generated DAX Calculated Column (Attempt):**") # Changed
+            #                 st.code(ai_output_disp.get("calculated_column", "Not provided or error."), language="dax")
+            #                 st.write("**Suggested Data Type (Attempt):**") # Changed
+            #                 st.code(ai_output_disp.get("dataType", "text"), language="text")
 
         elif st.session_state['visual_type'] == "Table":
             st.markdown("#### Configure Table Visual")
@@ -625,105 +695,107 @@ def display_visual_configuration_section():
             else:
                 st.caption("No items selected for the table.")
 
-            # --- AI DAX generation for selected expressions (replicate Matrix logic) ---
-            st.markdown("---"); st.subheader("AI DAX Generation for Selected Table Items")
-            items_to_process_for_ai = []
-            for item_dict_ai in st.session_state.get('visual_selected_table_fields', []):
-                if item_dict_ai.get("type") == "expression" and item_dict_ai.get("pbi_expression"):
-                    items_to_process_for_ai.append({
-                        "label": item_dict_ai["label"],
-                        "pbi_expression": item_dict_ai["pbi_expression"],
-                        "category": "TableField"
-                    })
-            if not items_to_process_for_ai:
-                st.caption("No expressions selected in Table fields to generate DAX for.")
-            if items_to_process_for_ai and st.button("Generate DAX with AI for Selected Table Items", key="ai_dax_table_btn_main"):
-                with st.spinner(f"Generating DAX for {len(items_to_process_for_ai)} expression(s)..."):
-                    for item_to_gen in items_to_process_for_ai:
-                        label = item_to_gen["label"]
-                        pbi_expr = item_to_gen["pbi_expression"]
-                        category = item_to_gen["category"]
-                        unique_key = f"{category}_{label}"
-                        dax_results = generate_dax_from_sql(pbi_expr)
-                        st.session_state['visual_ai_dax_results'][unique_key] = {
-                            "label": label,
-                            "input_pbi_expression": pbi_expr,
-                            "ai_output": dax_results,
-                            "category": category
-                        }
+            # # --- AI DAX generation for selected expressions (replicate Matrix logic) ---
+            # st.markdown("---"); st.subheader("AI DAX Generation for Selected Table Items")
+            # items_to_process_for_ai = []
+            # for item_dict_ai in st.session_state.get('visual_selected_table_fields', []):
+            #     if item_dict_ai.get("type") == "expression" and item_dict_ai.get("pbi_expression"):
+            #         items_to_process_for_ai.append({
+            #             "label": item_dict_ai["label"],
+            #             "pbi_expression": item_dict_ai["pbi_expression"],
+            #             "category": "TableField"
+            #         })
+            # if not items_to_process_for_ai:
+            #     st.caption("No expressions selected in Table fields to generate DAX for.")
+            # if items_to_process_for_ai and st.button("Generate DAX with AI for Selected Table Items", key="ai_dax_table_btn_main"):
+            #     with st.spinner(f"Generating DAX for {len(items_to_process_for_ai)} expression(s)..."):
+            #         for item_to_gen in items_to_process_for_ai:
+            #             label = item_to_gen["label"]
+            #             pbi_expr = item_to_gen["pbi_expression"]
+            #             category = item_to_gen["category"]
+            #             unique_key = f"{category}_{label}"
+            #             dax_results = generate_dax_from_sql(pbi_expr)
+            #             st.session_state['visual_ai_dax_results'][unique_key] = {
+            #                 "label": label,
+            #                 "input_pbi_expression": pbi_expr,
+            #                 "ai_output": dax_results,
+            #                 "category": category
+            #             }
 
-                # Update the selected table fields with AI DAX (measure recommendation)
-                overall_config_updated_by_ai = False
-                current_list_in_state_ai = st.session_state['visual_selected_table_fields']
-                for item_dict_idx_ai in range(len(current_list_in_state_ai)):
-                    item_dict_ai_update = current_list_in_state_ai[item_dict_idx_ai]
-                    if item_dict_ai_update.get("type") == "expression":
-                        ai_result_lookup_key = f"TableField_{item_dict_ai_update['label']}"
-                        had_previous_ai_dax = "ai_generated_dax" in item_dict_ai_update
-                        current_item_modified_by_ai = False
+            #     # Update the selected table fields with AI DAX (measure recommendation)
+            #     overall_config_updated_by_ai = False
+            #     current_list_in_state_ai = st.session_state['visual_selected_table_fields']
+            #     for item_dict_idx_ai in range(len(current_list_in_state_ai)):
+            #         item_dict_ai_update = current_list_in_state_ai[item_dict_idx_ai]
+            #         if item_dict_ai_update.get("type") == "expression":
+            #             ai_result_lookup_key = f"TableField_{item_dict_ai_update['label']}"
+            #             had_previous_ai_dax = "ai_generated_dax" in item_dict_ai_update
+            #             current_item_modified_by_ai = False
 
-                        if ai_result_lookup_key in st.session_state['visual_ai_dax_results']:
-                            ai_result_data = st.session_state['visual_ai_dax_results'][ai_result_lookup_key]
-                            ai_output_data = ai_result_data['ai_output']
-                            recommendation_data = ai_output_data.get("recommendation", "").lower()
-                            if "measure" in recommendation_data:
-                                measure_dax_from_ai = ai_output_data.get("measure")
-                                data_type_from_ai = ai_output_data.get("dataType", "text")
-                                if measure_dax_from_ai and not measure_dax_from_ai.startswith("Error:") and measure_dax_from_ai != "Not provided or error.":
-                                    item_dict_ai_update["ai_generated_dax"] = measure_dax_from_ai
-                                    item_dict_ai_update["ai_dataType"] = data_type_from_ai
-                                    current_item_modified_by_ai = True
+            #             if ai_result_lookup_key in st.session_state['visual_ai_dax_results']:
+            #                 ai_result_data = st.session_state['visual_ai_dax_results'][ai_result_lookup_key]
+            #                 ai_output_data = ai_result_data['ai_output']
+            #                 recommendation_data = ai_output_data.get("recommendation", "").lower()
+            #                 if "measure" in recommendation_data:
+            #                     measure_dax_from_ai = ai_output_data.get("measure")
+            #                     data_type_from_ai = ai_output_data.get("dataType", "text")
+            #                     if measure_dax_from_ai and not measure_dax_from_ai.startswith("Error:") and measure_dax_from_ai != "Not provided or error.":
+            #                         item_dict_ai_update["ai_generated_dax"] = measure_dax_from_ai
+            #                         item_dict_ai_update["ai_dataType"] = data_type_from_ai
+            #                         current_item_modified_by_ai = True
 
-                        if not current_item_modified_by_ai and had_previous_ai_dax:
-                            if "ai_generated_dax" in item_dict_ai_update: del item_dict_ai_update["ai_generated_dax"]
-                            if "ai_dataType" in item_dict_ai_update: del item_dict_ai_update["ai_dataType"]
-                            current_item_modified_by_ai = True
+            #             if not current_item_modified_by_ai and had_previous_ai_dax:
+            #                 if "ai_generated_dax" in item_dict_ai_update: del item_dict_ai_update["ai_generated_dax"]
+            #                 if "ai_dataType" in item_dict_ai_update: del item_dict_ai_update["ai_dataType"]
+            #                 current_item_modified_by_ai = True
 
-                        if current_item_modified_by_ai:
-                            overall_config_updated_by_ai = True
+            #             if current_item_modified_by_ai:
+            #                 overall_config_updated_by_ai = True
 
-                st.success(f"AI DAX generation complete for {len(st.session_state['visual_ai_dax_results'])} items.")
-                if overall_config_updated_by_ai:
-                    st.rerun() # Rerun to reflect the ai_generated_dax in the config file generation
+            #     st.success(f"AI DAX generation complete for {len(st.session_state['visual_ai_dax_results'])} items.")
+            #     if overall_config_updated_by_ai:
+            #         st.rerun() # Rerun to reflect the ai_generated_dax in the config file generation
 
-            # Show DAX Generation Results for Table
-            if st.session_state.get('visual_ai_dax_results'):
-                st.markdown("##### DAX Generation Results (for selected expressions):")
-                for unique_key_disp, result_data_disp in st.session_state['visual_ai_dax_results'].items():
-                    if result_data_disp.get("category") != "TableField":
-                        continue
-                    with st.expander(f"{result_data_disp['label']}"):
-                        st.write(f"**Input PBI Expression (Rule-Based):**")
-                        st.code(result_data_disp.get('input_pbi_expression', 'N/A'), language="dax")
-                        ai_output_disp = result_data_disp.get('ai_output', {})
-                        recommendation_disp = ai_output_disp.get("recommendation", "").lower()
-                        if "measure" in recommendation_disp:
-                            st.info("💡 **Recommendation:** **MEASURE**")
-                            st.write("**Generated DAX Measure:**")
-                            st.code(ai_output_disp.get("measure", "Not provided or error."), language="dax")
-                            st.write("**Suggested Data Type (for Measure):**")
-                            st.code(ai_output_disp.get("dataType", "text"), language="text")
-                        elif "calculated column" in recommendation_disp:
-                            st.info("💡 **Recommendation:** **CALCULATED COLUMN**")
-                            st.warning("Calculated Column is not directly used for visual measures. The generated DAX is for reference.")
-                            st.write("**Generated DAX Calculated Column (for reference):**")
-                            st.code(ai_output_disp.get("calculated_column", "Not provided or error."), language="dax")
-                        elif recommendation_disp and recommendation_disp != "error":
-                            st.info(f"💡 **Recommendation:** {recommendation_disp.upper()}")
-                            st.write("**Generated DAX Measure:**")
-                            st.code(ai_output_disp.get("measure", "Not provided or error."), language="dax")
-                            st.write("**Generated DAX Calculated Column:**")
-                            st.code(ai_output_disp.get("calculated_column", "Not provided or error."), language="dax")
-                            st.write("**Suggested Data Type (for Measure):**")
-                            st.code(ai_output_disp.get("dataType", "text"), language="text")
-                        else:
-                            st.error(f"Recommendation: {recommendation_disp if recommendation_disp else 'Not available'}")
-                            st.write("**Generated DAX Measure (Attempt):**")
-                            st.code(ai_output_disp.get("measure", "Not provided or error."), language="dax")
-                            st.write("**Generated DAX Calculated Column (Attempt):**")
-                            st.code(ai_output_disp.get("calculated_column", "Not provided or error."), language="dax")
-                            st.write("**Suggested Data Type (Attempt):**")
-                            st.code(ai_output_disp.get("dataType", "text"), language="text")
+            # # Show DAX Generation Results for Table
+            # if st.session_state.get('visual_ai_dax_results'):
+            #     st.markdown("##### DAX Generation Results (for selected expressions):")
+            #     for unique_key_disp, result_data_disp in st.session_state['visual_ai_dax_results'].items():
+            #         if result_data_disp.get("category") != "TableField":
+            #             continue
+            #         with st.expander(f"{result_data_disp['label']}"):
+            #             st.write(f"**Input PBI Expression (Rule-Based):**")
+            #             st.code(result_data_disp.get('input_pbi_expression', 'N/A'), language="dax")
+            #             ai_output_disp = result_data_disp.get('ai_output', {})
+            #             recommendation_disp = ai_output_disp.get("recommendation", "").lower()
+            #             if "measure" in recommendation_disp:
+            #                 st.info("💡 **Recommendation:** **MEASURE**")
+            #                 st.write("**Generated DAX Measure:**")
+            #                 st.code(ai_output_disp.get("measure", "Not provided or error."), language="dax")
+            #                 st.write("**Suggested Data Type (for Measure):**")
+            #                 st.code(ai_output_disp.get("dataType", "text"), language="text")
+            #             elif "calculated column" in recommendation_disp:
+            #                 st.info("💡 **Recommendation:** **CALCULATED COLUMN**")
+            #                 st.warning("Calculated Column is not directly used for visual measures. The generated DAX is for reference.")
+            #                 st.write("**Generated DAX Calculated Column (for reference):**")
+            #                 st.code(ai_output_disp.get("calculated_column", "Not provided or error."), language="dax")
+            #             elif recommendation_disp and recommendation_disp != "error":
+            #                 st.info(f"💡 **Recommendation:** {recommendation_disp.upper()}")
+            #                 st.write("**Generated DAX Measure:**")
+            #                 st.code(ai_output_disp.get("measure", "Not provided or error."), language="dax")
+            #                 st.write("**Generated DAX Calculated Column:**")
+            #                 st.code(ai_output_disp.get("calculated_column", "Not provided or error."), language="dax")
+            #                 st.write("**Suggested Data Type (for Measure):**")
+            #                 st.code(ai_output_disp.get("dataType", "text"), language="text")
+            #             else:
+            #                 st.error(f"Recommendation: {recommendation_disp if recommendation_disp else 'Not available'}")
+            #                 st.write("**Generated DAX Measure (Attempt):**")
+            #                 st.code(ai_output_disp.get("measure", "Not provided or error."), language="dax")
+            #                 st.write("**Generated DAX Calculated Column (Attempt):**")
+            #                 st.code(ai_output_disp.get("calculated_column", "Not provided or error."), language="dax")
+            #                 st.write("**Suggested Data Type (Attempt):**")
+            #                 st.code(ai_output_disp.get("dataType", "text"), language="text")
+
+
 
 
 
@@ -775,230 +847,211 @@ def display_pbi_automation_config_section():
     st.markdown("---")
     st.header("PBI Automation `config.yaml` Generation")
 
-    if st.button("Generate PBI Automation Config File"):
-        try:
-            new_config = {}
-            # --- Hardcoded Static Fields ---
-
-            report_name = st.session_state.get('report_name', "My Report")
-            
-            new_config['projectName'] = report_name
-            new_config['dataset'] = { 
-                "connection": { 
-                    "connectionString": CONNECTION_STRING,
-                    "database": DATABASE_NAME
-                }, 
-                "modelName": "EU Order to Cash (Ad-Hoc)"
+    try:
+        new_config = {}
+        # --- Hardcoded Static Fields ---
+        report_name = st.session_state.get('report_name', "My Report")
+        
+        new_config['projectName'] = report_name
+        new_config['dataset'] = { 
+            "connection": { 
+                "connectionString": CONNECTION_STRING,
+                "database": DATABASE_NAME
+            }, 
+            "modelName": "EU Order to Cash (Ad-Hoc)"
+        }
+        new_config['report'] = { 
+            'title': FlowDict({"text":report_name}), 
+            'data_refresh': FlowDict({"table": "Date Refresh Table", "column": "UPDATED_DATE"})
+        }
+        # --- Generate Measures (Dynamic) ---
+        generated_measures = []
+        measure_candidate_lists = [
+            st.session_state.get('visual_selected_rows', []),
+            st.session_state.get('visual_selected_columns', []),
+            st.session_state.get('visual_selected_values', []),
+            st.session_state.get('visual_selected_table_fields', []) 
+        ]
+        processed_measure_labels = set() 
+        for item_list in measure_candidate_lists:
+            for item in item_list:
+                if item.get("type") == "expression" and item.get("label") not in processed_measure_labels:
+                    base_measure_name = item["label"]
+                    measure_name_for_definition = base_measure_name
+                    if not base_measure_name.endswith(" Measure"):
+                        measure_name_for_definition = f"{base_measure_name} Measure"
+                    dax_expression = item.get("pbi_expression") 
+                    data_type = "text" 
+                    if "ai_generated_dax" in item and item.get("ai_generated_dax"):
+                        dax_expression = item["ai_generated_dax"]
+                        data_type = item.get("ai_dataType", "text")
+                    measure_table = item.get("pbi_table", "_Measures")
+                    generated_measures.append(FlowDict({
+                        "name": measure_name_for_definition,
+                        "table": measure_table, 
+                        "expression": dax_expression,
+                        "dataType": data_type
+                    }))
+                    processed_measure_labels.add(base_measure_name)
+        new_config['report']['measures'] = generated_measures
+        visuals = []
+        # --- Matrix Visual ---
+        if st.session_state.get('visual_type', 'Matrix') == "Matrix":
+            # ...existing matrix config code...
+            matrix_rows_config = []
+            for item in st.session_state.get('visual_selected_rows', []):
+                row_item_config = {"name": item["label"], "table": item.get("pbi_table", "UnknownTable"), "type": "Column"}
+                if item.get("type") == "base" and item.get("pbi_table") and item.get("pbi_column"):
+                    row_item_config["name"] = item["pbi_column"]
+                    row_item_config["table"] = item["pbi_table"]
+                elif item.get("type") == "expression":
+                    row_item_config["name"] = item["label"]
+                    row_item_config["table"] = item.get("pbi_table", "_Measures")
+                matrix_rows_config.append(FlowDict(row_item_config))
+            matrix_columns_config = []
+            for item in st.session_state.get('visual_selected_columns', []):
+                column_item_config = {"name": item["label"], "table": item.get("pbi_table", "UnknownTable"), "type": "Column"}
+                if item.get("type") == "base" and item.get("pbi_table") and item.get("pbi_column"):
+                    column_item_config["name"] = item["pbi_column"]
+                    column_item_config["table"] = item["pbi_table"]
+                elif item.get("type") == "expression":
+                    column_item_config["name"] = item["label"]
+                    column_item_config["table"] = item.get("pbi_table", "_Measures")
+                matrix_columns_config.append(FlowDict(column_item_config))
+            matrix_values_config = []
+            for item in st.session_state.get('visual_selected_values', []):
+                if item.get("type") == "expression":
+                    base_value_name = item["label"]
+                    value_name_for_visual = base_value_name
+                    if not base_value_name.endswith(" Measure"):
+                        value_name_for_visual = f"{base_value_name} Measure"
+                    measure_table_ref = item.get("pbi_table", "_Measures")
+                    defined_measure = next((m for m in generated_measures if m["name"] == value_name_for_visual), None)
+                    if defined_measure:
+                        measure_table_ref = defined_measure["table"]
+                    matrix_values_config.append(FlowDict({
+                        "name": value_name_for_visual, 
+                        "table": measure_table_ref, 
+                        "type": "Measure"
+                    }))
+            # --- Generate Filters (Dynamic) ---
+            matrix_filters_config = []
+            selected_filter_dax_expressions = st.session_state.get('visual_selected_filters_dax', [])
+            for pbi_dax_filter_str in selected_filter_dax_expressions:
+                parsed_filter_structure = parse_simple_dax_filter(pbi_dax_filter_str, generated_measures)
+                if parsed_filter_structure:
+                    matrix_filters_config.append(FlowDict(parsed_filter_structure))
+                else:
+                    st.warning(f"Could not parse filter DAX: '{pbi_dax_filter_str}'. This filter will be skipped in config.yaml. Consider simplifying the DAX or extending parsing capabilities if this filter is required.")
+            matrix_visual_definition = {
+                "type": "matrix",
+                "position": FlowDict({"x": 28.8, "y": 100, "width": 1220, "height": 800}),
+                "rows": matrix_rows_config,
+                "columns": matrix_columns_config,
+                "values": matrix_values_config,
+                "filters": matrix_filters_config
             }
-            new_config['report'] = { 
-                'title': FlowDict({"text":report_name}), 
-                'data_refresh': FlowDict({"table": "Date Refresh Table", "column": "UPDATED_DATE"})
+            visuals.append(matrix_visual_definition)
+        # --- Table Visual ---
+        elif st.session_state.get('visual_type') == "Table":
+            table_fields_config = []
+            for item in st.session_state.get('visual_selected_table_fields', []):
+                field_item_config = {"name": item["label"], "table": item.get("pbi_table", "UnknownTable"), "type": "Column"}
+                if item.get("type") == "base" and item.get("pbi_table") and item.get("pbi_column"):
+                    field_item_config["name"] = item["pbi_column"]
+                    field_item_config["table"] = item["pbi_table"]
+                    field_item_config["type"] = "Column"
+                elif item.get("type") == "expression":
+                    base_value_name = item["label"]
+                    value_name_for_visual = base_value_name
+                    if not base_value_name.endswith(" Measure"):
+                        value_name_for_visual = f"{base_value_name} Measure"
+                    measure_table_ref = item.get("pbi_table", "_Measures")
+                    defined_measure = next((m for m in generated_measures if m["name"] == value_name_for_visual), None)
+                    if defined_measure:
+                        measure_table_ref = defined_measure["table"]
+                    field_item_config["name"] = value_name_for_visual
+                    field_item_config["table"] = measure_table_ref
+                    field_item_config["type"] = "Measure"
+                table_fields_config.append(FlowDict(field_item_config))
+            table_filters_config = []
+            selected_filter_dax_expressions = st.session_state.get('visual_selected_filters_dax', [])
+            for pbi_dax_filter_str in selected_filter_dax_expressions:
+                parsed_filter_structure = parse_simple_dax_filter(pbi_dax_filter_str, generated_measures)
+                if parsed_filter_structure:
+                    table_filters_config.append(FlowDict(parsed_filter_structure))
+                else:
+                    st.warning(f"Could not parse filter DAX: '{pbi_dax_filter_str}'. This filter will be skipped in config.yaml for the table visual.")
+            table_visual_definition = {
+                "type": "table",
+                "position": FlowDict({"x": 28.8, "y": 100, "width": 1220, "height": 800}),
+                "fields": table_fields_config,
+                "filters": table_filters_config
             }
-
-            # --- Generate Measures (Dynamic) ---
-            generated_measures = []
-            measure_candidate_lists = [
-                st.session_state.get('visual_selected_rows', []),
-                st.session_state.get('visual_selected_columns', []),
-                st.session_state.get('visual_selected_values', []),
-                st.session_state.get('visual_selected_table_fields', []) 
-            ]
-            processed_measure_labels = set() 
-            for item_list in measure_candidate_lists:
-                for item in item_list:
-                    if item.get("type") == "expression" and item.get("label") not in processed_measure_labels:
-                        base_measure_name = item["label"]
-                        measure_name_for_definition = base_measure_name
-                        if not base_measure_name.endswith(" Measure"):
-                            measure_name_for_definition = f"{base_measure_name} Measure"
-                        dax_expression = item.get("pbi_expression") 
-                        data_type = "text" 
-                        if "ai_generated_dax" in item and item.get("ai_generated_dax"):
-                            dax_expression = item["ai_generated_dax"]
-                            data_type = item.get("ai_dataType", "text")
-                        measure_table = item.get("pbi_table", "_Measures")
-                        generated_measures.append(FlowDict({
-                            "name": measure_name_for_definition,
-                            "table": measure_table, 
-                            "expression": dax_expression,
-                            "dataType": data_type
-                        }))
-                        processed_measure_labels.add(base_measure_name)
-            new_config['report']['measures'] = generated_measures
-
-            visuals = []
-
-            # --- Matrix Visual ---
-            if st.session_state.get('visual_type', 'Matrix') == "Matrix":
-                # ...existing matrix config code...
-                matrix_rows_config = []
-                for item in st.session_state.get('visual_selected_rows', []):
-                    row_item_config = {"name": item["label"], "table": item.get("pbi_table", "UnknownTable"), "type": "Column"}
-                    if item.get("type") == "base" and item.get("pbi_table") and item.get("pbi_column"):
-                        row_item_config["name"] = item["pbi_column"]
-                        row_item_config["table"] = item["pbi_table"]
-                    elif item.get("type") == "expression":
-                        row_item_config["name"] = item["label"]
-                        row_item_config["table"] = item.get("pbi_table", "_Measures")
-                    matrix_rows_config.append(FlowDict(row_item_config))
-
-                matrix_columns_config = []
-                for item in st.session_state.get('visual_selected_columns', []):
-                    column_item_config = {"name": item["label"], "table": item.get("pbi_table", "UnknownTable"), "type": "Column"}
-                    if item.get("type") == "base" and item.get("pbi_table") and item.get("pbi_column"):
-                        column_item_config["name"] = item["pbi_column"]
-                        column_item_config["table"] = item["pbi_table"]
-                    elif item.get("type") == "expression":
-                        column_item_config["name"] = item["label"]
-                        column_item_config["table"] = item.get("pbi_table", "_Measures")
-                    matrix_columns_config.append(FlowDict(column_item_config))
-
-                matrix_values_config = []
-                for item in st.session_state.get('visual_selected_values', []):
-                    if item.get("type") == "expression":
-                        base_value_name = item["label"]
-                        value_name_for_visual = base_value_name
-                        if not base_value_name.endswith(" Measure"):
-                            value_name_for_visual = f"{base_value_name} Measure"
-                        measure_table_ref = item.get("pbi_table", "_Measures")
-                        defined_measure = next((m for m in generated_measures if m["name"] == value_name_for_visual), None)
-                        if defined_measure:
-                            measure_table_ref = defined_measure["table"]
-                        matrix_values_config.append(FlowDict({
-                            "name": value_name_for_visual, 
-                            "table": measure_table_ref, 
-                            "type": "Measure"
-                        }))
-
-                # --- Generate Filters (Dynamic) ---
-                matrix_filters_config = []
-                selected_filter_dax_expressions = st.session_state.get('visual_selected_filters_dax', [])
-                for pbi_dax_filter_str in selected_filter_dax_expressions:
-                    parsed_filter_structure = parse_simple_dax_filter(pbi_dax_filter_str, generated_measures)
-                    if parsed_filter_structure:
-                        matrix_filters_config.append(FlowDict(parsed_filter_structure))
-                    else:
-                        st.warning(f"Could not parse filter DAX: '{pbi_dax_filter_str}'. This filter will be skipped in config.yaml. Consider simplifying the DAX or extending parsing capabilities if this filter is required.")
-
-                matrix_visual_definition = {
-                    "type": "matrix",
-                    "position": FlowDict({"x": 28.8, "y": 100, "width": 1220, "height": 800}),
-                    "rows": matrix_rows_config,
-                    "columns": matrix_columns_config,
-                    "values": matrix_values_config,
-                    "filters": matrix_filters_config
-                }
-                visuals.append(matrix_visual_definition)
-
-            # --- Table Visual ---
-            elif st.session_state.get('visual_type') == "Table":
-                table_fields_config = []
-                for item in st.session_state.get('visual_selected_table_fields', []):
-                    field_item_config = {"name": item["label"], "table": item.get("pbi_table", "UnknownTable"), "type": "Column"}
-                    if item.get("type") == "base" and item.get("pbi_table") and item.get("pbi_column"):
-                        field_item_config["name"] = item["pbi_column"]
-                        field_item_config["table"] = item["pbi_table"]
-                        field_item_config["type"] = "Column"
-                    elif item.get("type") == "expression":
-                        base_value_name = item["label"]
-                        value_name_for_visual = base_value_name
-                        if not base_value_name.endswith(" Measure"):
-                            value_name_for_visual = f"{base_value_name} Measure"
-                        measure_table_ref = item.get("pbi_table", "_Measures")
-                        defined_measure = next((m for m in generated_measures if m["name"] == value_name_for_visual), None)
-                        if defined_measure:
-                            measure_table_ref = defined_measure["table"]
-                        field_item_config["name"] = value_name_for_visual
-                        field_item_config["table"] = measure_table_ref
-                        field_item_config["type"] = "Measure"
-                    table_fields_config.append(FlowDict(field_item_config))
-
-                table_filters_config = []
-                selected_filter_dax_expressions = st.session_state.get('visual_selected_filters_dax', [])
-                for pbi_dax_filter_str in selected_filter_dax_expressions:
-                    parsed_filter_structure = parse_simple_dax_filter(pbi_dax_filter_str, generated_measures)
-                    if parsed_filter_structure:
-                        table_filters_config.append(FlowDict(parsed_filter_structure))
-                    else:
-                        st.warning(f"Could not parse filter DAX: '{pbi_dax_filter_str}'. This filter will be skipped in config.yaml for the table visual.")
-
-                table_visual_definition = {
-                    "type": "table",
-                    "position": FlowDict({"x": 28.8, "y": 100, "width": 1220, "height": 800}),
-                    "fields": table_fields_config,
-                    "filters": table_filters_config
-                }
-                visuals.append(table_visual_definition)
-
-            new_config['report']['visuals'] = visuals
-
-
-            yaml_string_io = StringIO()
-            yaml.dump(new_config, yaml_string_io, Dumper=CustomDumper, sort_keys=False, indent=2, allow_unicode=True)
-            generated_yaml_str = yaml_string_io.getvalue()
-            st.session_state['generated_pbi_config'] = generated_yaml_str.strip()
-            st.success("PBI Automation config.yaml content generated successfully!")
-
-            # --- Save config locally and run PBI Automation ---
-            local_config_filename = "config.yaml"
-            app_dir = Path(__file__).parent.parent # Assuming this script is in 'src'
-            local_config_path = app_dir / local_config_filename # This is in the Streamlit app's directory
-            with open(local_config_path, 'w', encoding='utf-8') as f:
-                f.write(st.session_state['generated_pbi_config'])
-            st.info(f"Generated `config.yaml` saved to: {local_config_path}") # Updated message
+            visuals.append(table_visual_definition)
+        new_config['report']['visuals'] = visuals
+        yaml_string_io = StringIO()
+        yaml.dump(new_config, yaml_string_io, Dumper=CustomDumper, sort_keys=False, indent=2, allow_unicode=True)
+        generated_yaml_str = yaml_string_io.getvalue()
+        st.session_state['generated_pbi_config'] = generated_yaml_str.strip()
+        st.success("PBI Automation config.yaml content generated successfully!")
+        # --- Save config locally and run PBI Automation ---
+        local_config_filename = "config.yaml"
+        app_dir = Path(__file__).parent.parent # Assuming this script is in 'src'
+        local_config_path = app_dir / local_config_filename # This is in the Streamlit app's directory
+        with open(local_config_path, 'w', encoding='utf-8') as f:
+            f.write(st.session_state['generated_pbi_config'])
+        st.info(f"Generated `config.yaml` saved to: {local_config_path}") # Updated message
+        
+        # --- PBI Automation script execution logic (Placeholder) ---
+        # This assumes your PBI Automation script is in a 'PBI Automation' directory
+        # relative to this script's location, and it's called 'main.py'.
+        # Adjust the path and command as necessary.
+        pbi_automation_script_path = Path(r"C:\Users\NileshPhapale\Desktop\PBI Automation\main.py")
+        pbi_automation_project_dir = Path(r"C:\Users\NileshPhapale\Desktop\PBI Automation") # Still needed for cwd
+        python_executable = r"C:\Users\NileshPhapale\Desktop\PBI Automation\.venv\Scripts\python.exe" # Specific python executable
+        
+        if pbi_automation_script_path.exists():
+            st.info(f"Attempting to run PBI Automation script: {pbi_automation_script_path}")
             
-            # --- PBI Automation script execution logic (Placeholder) ---
-            # This assumes your PBI Automation script is in a 'PBI Automation' directory
-            # relative to this script's location, and it's called 'main.py'.
-            # Adjust the path and command as necessary.
-            pbi_automation_script_path = Path(r"C:\Users\NileshPhapale\Desktop\PBI Automation\main.py")
-            pbi_automation_project_dir = Path(r"C:\Users\NileshPhapale\Desktop\PBI Automation") # Still needed for cwd
-            python_executable = r"C:\Users\NileshPhapale\Desktop\PBI Automation\.venv\Scripts\python.exe" # Specific python executable
-            
-            if pbi_automation_script_path.exists():
-                st.info(f"Attempting to run PBI Automation script: {pbi_automation_script_path}")
-                
-                try:
-                    # Construct the command
-                    command = [
-                        python_executable, 
-                        str(pbi_automation_script_path),
-                        "--config", 
-                        str(local_config_path.resolve()) # Pass absolute path to the config file
-                    ]
-                    st.info(f"Executing command: {' '.join(command)}") # Log the command being run
-
-                    process = subprocess.Popen(
-                        command, 
-                        cwd=str(pbi_automation_project_dir), # Script still runs from its own directory
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
-                        text=True,
-                        encoding='utf-8' 
-                    )
-                    stdout, stderr = process.communicate(timeout=300) 
-
-                    if process.returncode == 0:
-                        st.success("PBI Automation script executed successfully!")
-                        if stdout: st.text_area("Script Output:", value=stdout, height=200)
-                        if stderr: st.text_area("Script Error Output (if any):", value=stderr, height=100) # Show stderr even on success
-                    else:
-                        st.error(f"PBI Automation script execution failed with code {process.returncode}.")
-                        if stdout: st.text_area("Script Output:", value=stdout, height=150)
-                        if stderr: st.text_area("Script Error Output:", value=stderr, height=150)
-                except subprocess.TimeoutExpired:
-                    st.error("PBI Automation script timed out.")
-                except FileNotFoundError:
-                    st.error(f"Python executable not found at '{python_executable}'. Please ensure the path is correct.")
-                except Exception as sub_e:
-                    st.error(f"Error running PBI Automation script: {sub_e}")
-                    st.exception(sub_e)
-            else:
-                st.warning(f"PBI Automation script not found at: {pbi_automation_script_path}. Skipping execution.")
-
-        except Exception as e:
-            st.error(f"An unexpected error occurred during config generation or script execution: {e}")
-            st.exception(e) 
+            try:
+                # Construct the command
+                command = [
+                    python_executable, 
+                    str(pbi_automation_script_path),
+                    "--config", 
+                    str(local_config_path.resolve()) # Pass absolute path to the config file
+                ]
+                st.info(f"Executing command: {' '.join(command)}") # Log the command being run
+                process = subprocess.Popen(
+                    command, 
+                    cwd=str(pbi_automation_project_dir), # Script still runs from its own directory
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    encoding='utf-8' 
+                )
+                stdout, stderr = process.communicate(timeout=300) 
+                if process.returncode == 0:
+                    st.success("PBI Automation script executed successfully!")
+                    if stdout: st.text_area("Script Output:", value=stdout, height=200)
+                    if stderr: st.text_area("Script Error Output (if any):", value=stderr, height=100) # Show stderr even on success
+                else:
+                    st.error(f"PBI Automation script execution failed with code {process.returncode}.")
+                    if stdout: st.text_area("Script Output:", value=stdout, height=150)
+                    if stderr: st.text_area("Script Error Output:", value=stderr, height=150)
+            except subprocess.TimeoutExpired:
+                st.error("PBI Automation script timed out.")
+            except FileNotFoundError:
+                st.error(f"Python executable not found at '{python_executable}'. Please ensure the path is correct.")
+            except Exception as sub_e:
+                st.error(f"Error running PBI Automation script: {sub_e}")
+                st.exception(sub_e)
+        else:
+            st.warning(f"PBI Automation script not found at: {pbi_automation_script_path}. Skipping execution.")
+    except Exception as e:
+        st.error(f"An unexpected error occurred during config generation or script execution: {e}")
+        st.exception(e) 
     
     if st.session_state.get('generated_pbi_config'):
         st.subheader("Generated `config.yaml` Content (for review)")

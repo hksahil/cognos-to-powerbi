@@ -43,3 +43,7 @@ def initialize_session_state():
         st.session_state['visual_selected_filters_dax'] = [] 
     if "report_name" not in st.session_state:
         st.session_state["report_name"] = "My Report"
+    if 'build_report_triggered' not in st.session_state:
+        st.session_state['build_report_triggered'] = False
+    if 'build_report_phase' not in st.session_state:
+        st.session_state['build_report_phase'] = None

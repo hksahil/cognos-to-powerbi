@@ -1,4 +1,4 @@
-projectName: Test name 1
+projectName: My Report
 dataset:
   connection:
     connectionString: Data Source=powerbi://api.powerbi.com/v1.0/myorg/EMEA Development;Initial
@@ -6,15 +6,18 @@ dataset:
     database: 7f97f9b2-2c89-4359-966b-4612b960fbb1
   modelName: EU Order to Cash (Ad-Hoc)
 report:
-  title: {text: Test name 1}
+  title: {text: My Report}
   data_refresh: {table: Date Refresh Table, column: UPDATED_DATE}
-  measures: []
+  measures:
+  - {name: Billed_Units Measure, table: Order To Cash (OTC), expression: 'SUM(''Order
+      To Cash (OTC)''[Billed_Units])', dataType: decimal number}
   visuals:
   - type: matrix
     position: {x: 28.8, y: 100, width: 1220, height: 800}
     rows: []
     columns: []
-    values: []
+    values:
+    - {name: Billed_Units Measure, table: Order To Cash (OTC), type: Measure}
     filters:
     - {field: {name: Company ID, table: Country, type: column}, filterType: Categorical,
       values: [E211]}
