@@ -9,15 +9,14 @@ report:
   title: {text: 1.1.10.117. Daily Report Renault}
   data_refresh: {table: Date Refresh Table, column: UPDATED_DATE}
   measures:
-  - {name: Billed_Units Measure, table: Order To Cash (OTC), expression: 'SUM(''Order
-      To Cash (OTC)''[Billed_Units])', dataType: decimal number}
+  - {name: Billed_Units Measure, table: Order To Cash (OTC), expression: 'SUM( ''Order
+      To Cash (OTC)''[Billed_Units] )', dataType: whole number}
   visuals:
   - type: table
-    position: {x: 28.8, y: 200, width: 1220, height: 300}
+    position: {x: 28.8, y: 100, width: 1220, height: 800}
     fields:
-    - {name: Sold To Hierarchy Level 5 Label, table: Sold To Customer (Hierarchy),
-      type: Column}
-    - {name: KAM Local Country ID, table: Selling Responsible, type: Column}
+    - {name: Payer Hierarchy Level 5 Label, table: Payer Customer (Hierarchy), type: Column}
+    - {name: Payer Selling Responsible ID, table: Payer Selling Responsible, type: Column}
     - {name: PAK Hierarchy Level 2 Desc, table: Product Aggregation Key (PAK), type: Column}
     - {name: Billed_Units Measure, table: Order To Cash (OTC), type: Measure}
     filters:
@@ -27,5 +26,5 @@ report:
       filterType: Categorical, values: ['01']}
     - {field: {name: PAK Hierarchy Level 1 Code, table: Product Aggregation Key (PAK),
         type: column}, filterType: Categorical, values: ['10']}
-    - {field: {name: Sold To Hierarchy Level 4 ID, table: Sold To Customer (Hierarchy),
+    - {field: {name: Payer Hierarchy Level 4 ID, table: Payer Customer (Hierarchy),
         type: column}, filterType: Categorical, values: [DE4RENZENT]}
