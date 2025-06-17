@@ -5,6 +5,8 @@ from src.session import initialize_session_state
 from src.ui import display_sidebar, display_query_input_area, display_analysis_results_tabs, \
     display_visual_configuration_section, display_pbi_automation_config_section
 
+from dotenv import load_dotenv
+load_dotenv(dotenv_path='.env')
 
 def main():
     st.set_page_config(page_title="SQL to Power BI Mapper", page_icon="📊", layout="wide")

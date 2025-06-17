@@ -41,3 +41,5 @@ def initialize_session_state():
         st.session_state['translated_filter_conditions'] = [] # For storing {sql, pbi_dax, id}
     if 'visual_selected_filters_dax' not in st.session_state:
         st.session_state['visual_selected_filters_dax'] = [] 
+    if "report_name" not in st.session_state:
+        st.session_state["report_name"] = "My Report"

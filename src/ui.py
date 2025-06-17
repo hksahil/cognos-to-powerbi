@@ -7,7 +7,7 @@ import pandas as pd
 import sqlparse
 import yaml
 
-from src.constants import MAPPING_FILE_PATH
+from src.constants import MAPPING_FILE_PATH, CONNECTION_STRING, DATABASE_NAME
 from src.dax import generate_powerbi_equivalent_formula, generate_dax_from_sql, parse_dax_filter_for_display, \
     parse_simple_dax_filter
 from src.lineage import build_visual_candidates, enrich_selected_items
@@ -308,6 +308,18 @@ def display_visual_configuration_section():
                 if current_choice_for_base_col not in options:
                     current_choice_for_base_col = options[0] if options else None
 
+                # --- NEW: Find usages of this base_col ---
+                usages = []
+                for item in st.session_state['lineage_data']:
+                    # SELECT columns/expressions
+                    if base_col in item.get('base_columns', []):
+                        if item.get('type') == 'filter_condition':
+                            usages.append(f"Filter: `{item.get('filter_condition', 'N/A')}`")
+                        else:
+                            usages.append(f"Column: `{item.get('item', 'N/A')}` (Type: {item.get('type', 'N/A')})")
+                
+
+
                 if options: # Only show radio if there are options
                     chosen = st.radio(
                         f"Choose PBI mapping for base DB column `{base_col}`:", 
@@ -318,6 +330,10 @@ def display_visual_configuration_section():
                     if st.session_state['base_col_ambiguity_choices'].get(base_col) != chosen:
                         st.session_state['base_col_ambiguity_choices'][base_col] = chosen
                         ambiguity_resolved_this_run = True
+
+                    # Display usages above the radio
+                    if usages:
+                        st.markdown("**Used in:**<br>" + "<br>".join(usages), unsafe_allow_html=True)
         else:
             st.caption("No base column ambiguities found or all have single PBI mappings.")
 
@@ -352,6 +368,16 @@ def display_visual_configuration_section():
             st.session_state['visual_config_candidates_built_after_resolution'] = True # Mark as built
             st.session_state['translated_filter_conditions'] = [] # Clear to force re-translation with new candidates
             st.rerun()
+
+        
+        st.markdown("---")
+        st.subheader("Report Name")
+        report_name = st.text_input(
+            "Enter a name for your Power BI report:",
+            value=st.session_state.get('report_name'),
+            key="report_name_input"
+        )
+        st.session_state['report_name'] = report_name
 
 
         st.markdown("---")
@@ -753,16 +779,19 @@ def display_pbi_automation_config_section():
         try:
             new_config = {}
             # --- Hardcoded Static Fields ---
-            new_config['projectName'] = "1.1.10.117. Daily Report Renault"
+
+            report_name = st.session_state.get('report_name', "My Report")
+            
+            new_config['projectName'] = report_name
             new_config['dataset'] = { 
                 "connection": { 
-                    "connectionString": 'Data Source=powerbi://api.powerbi.com/v1.0/myorg/EMEA Development;Initial Catalog="EU Order to Cash (Ad-hoc)";Access Mode=readonly;Integrated Security=ClaimsToken',
-                    "database": "7f97f9b2-2c89-4359-966b-4612b960fbb1" 
+                    "connectionString": CONNECTION_STRING,
+                    "database": DATABASE_NAME
                 }, 
                 "modelName": "EU Order to Cash (Ad-Hoc)"
             }
             new_config['report'] = { 
-                'title': FlowDict({"text": "1.1.10.117. Daily Report Renault"}), 
+                'title': FlowDict({"text":report_name}), 
                 'data_refresh': FlowDict({"table": "Date Refresh Table", "column": "UPDATED_DATE"})
             }
 

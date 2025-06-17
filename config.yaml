@@ -1,4 +1,4 @@
-projectName: 1.1.10.117. Daily Report Renault
+projectName: Test name 1
 dataset:
   connection:
     connectionString: Data Source=powerbi://api.powerbi.com/v1.0/myorg/EMEA Development;Initial
@@ -6,19 +6,15 @@ dataset:
     database: 7f97f9b2-2c89-4359-966b-4612b960fbb1
   modelName: EU Order to Cash (Ad-Hoc)
 report:
-  title: {text: 1.1.10.117. Daily Report Renault}
+  title: {text: Test name 1}
   data_refresh: {table: Date Refresh Table, column: UPDATED_DATE}
-  measures:
-  - {name: Billed_Units Measure, table: Order To Cash (OTC), expression: 'SUM( ''Order
-      To Cash (OTC)''[Billed_Units] )', dataType: whole number}
+  measures: []
   visuals:
-  - type: table
+  - type: matrix
     position: {x: 28.8, y: 100, width: 1220, height: 800}
-    fields:
-    - {name: Payer Hierarchy Level 5 Label, table: Payer Customer (Hierarchy), type: Column}
-    - {name: Payer Selling Responsible ID, table: Payer Selling Responsible, type: Column}
-    - {name: PAK Hierarchy Level 2 Desc, table: Product Aggregation Key (PAK), type: Column}
-    - {name: Billed_Units Measure, table: Order To Cash (OTC), type: Measure}
+    rows: []
+    columns: []
+    values: []
     filters:
     - {field: {name: Company ID, table: Country, type: column}, filterType: Categorical,
       values: [E211]}

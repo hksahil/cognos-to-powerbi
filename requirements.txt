@@ -3,3 +3,5 @@ pandas
 sqlparse
 google-generativeai
 sqlglot
+python-dotenv
+PyYaml
