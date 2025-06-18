@@ -23,7 +23,10 @@ def display_sidebar():
         
         if isinstance(current_mappings_in_session, dict) and "db_to_powerbi" in current_mappings_in_session:
             st.info(f"✅ Using mapping file: {MAPPING_FILE_PATH}")
-            st.info(f"Contains {len(current_mappings_in_session.get('db_to_powerbi', {}))} database columns")
+            st.info(f"Contains {len(current_mappings_in_session.get('db_to_powerbi', {}))} database column to powerbi mapping")
+            st.info(f"Contains {len(current_mappings_in_session.get('db_to_cognos', {}))} database column to cognos mapping")
+            st.info(f"Contains {len(current_mappings_in_session.get('expression_to_powerbi', {}))} database expression to powerbi mapping")
+
         else:
             st.warning(f"⚠️ Could not load or parse mapping file correctly from {MAPPING_FILE_PATH}. Check console for errors.")
             if st.button("Retry Loading Mappings"):

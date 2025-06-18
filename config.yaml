@@ -1,4 +1,4 @@
-projectName: My Report
+projectName: 1.0.0.19.h. Regulierer SPU Kundenhierarchie 3 Jahre
 dataset:
   connection:
     connectionString: Data Source=powerbi://api.powerbi.com/v1.0/myorg/EMEA Development;Initial
@@ -6,18 +6,39 @@ dataset:
     database: 7f97f9b2-2c89-4359-966b-4612b960fbb1
   modelName: EU Order to Cash (Ad-Hoc)
 report:
-  title: {text: My Report}
+  title: {text: 1.0.0.19.h. Regulierer SPU Kundenhierarchie 3 Jahre}
   data_refresh: {table: Date Refresh Table, column: UPDATED_DATE}
   measures:
+  - {name: Billed_Units Measure, table: Order To Cash (OTC), expression: 'SUM(''Order
+      To Cash (OTC)''[Billed_Units])', dataType: whole number}
+  - {name: Shipped_Units Measure, table: Order To Cash (OTC), expression: 'SUM(''Order
+      To Cash (OTC)''[Shipped_Units])', dataType: whole number}
   - {name: Payer___AOP_Qty Measure, table: Order To Cash (OTC), expression: 'SUM(''Order
       To Cash (OTC)''[Payer - AOP_Qty])', dataType: decimal number}
+  - {name: Open_Orders__PPGI_ Measure, table: Order To Cash (OTC), expression: 'SUM(''Order
+      To Cash (OTC)''[Open_Orders_by_Planned_PGI_Date])', dataType: whole number}
   visuals:
-  - type: table
+  - type: matrix
     position: {x: 28.8, y: 100, width: 1220, height: 800}
-    fields:
+    rows:
+    - {name: SPU ID, table: Order To Cash (OTC), type: Column}
+    - {name: SPU Desc, table: SPU, type: Column}
+    - {name: Payer Selling Responsible Label, table: Payer Selling Responsible, type: Column}
     - {name: Payer Hierarchy Level 1 Label, table: Payer Customer (Hierarchy), type: Column}
+    - {name: Payer Hierarchy Level 2 Label, table: Payer Customer (Hierarchy), type: Column}
     - {name: Payer Hierarchy Level 3 Label, table: Payer Customer (Hierarchy), type: Column}
+    - {name: Payer Hierarchy Level 4 Label, table: Payer Customer (Hierarchy), type: Column}
+    - {name: Payer Hierarchy Level 5 Label, table: Payer Customer (Hierarchy), type: Column}
+    - {name: Payer Label, table: Payer Customer (Hierarchy), type: Column}
+    - {name: Brand Label, table: Brand, type: Column}
+    columns:
+    - {name: Year, table: Order To Cash (OTC), type: Column}
+    - {name: Month, table: Order To Cash (OTC), type: Column}
+    values:
+    - {name: Billed_Units Measure, table: Order To Cash (OTC), type: Measure}
+    - {name: Shipped_Units Measure, table: Order To Cash (OTC), type: Measure}
     - {name: Payer___AOP_Qty Measure, table: Order To Cash (OTC), type: Measure}
+    - {name: Open_Orders__PPGI_ Measure, table: Order To Cash (OTC), type: Measure}
     filters:
     - {field: {name: Company ID, table: Country, type: column}, filterType: Categorical,
       values: [E211, E320, E667]}

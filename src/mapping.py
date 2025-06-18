@@ -34,7 +34,7 @@ def load_column_mappings(file_path=MAPPING_FILE_PATH):
                 # "mappings" key is missing or not a dictionary
                 print(f"ERROR: 'mappings' key not found or is not a dictionary in {file_path}. File content might be malformed.")
                 # Return a default structure to prevent errors downstream, but it will show 0 columns
-                return {"db_to_powerbi": {}, "powerbi_to_db": {}, "db_to_cognos": {}}
+                return {"db_to_powerbi": {}, "powerbi_to_db": {}, "db_to_cognos": {}, "expression_to_powerbi": {}}
     except FileNotFoundError:
         print(f"ERROR: Mapping file not found: {file_path}")
         return {"db_to_powerbi": {}, "powerbi_to_db": {}} # Return default empty structure

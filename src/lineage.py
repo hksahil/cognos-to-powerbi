@@ -90,6 +90,13 @@ def build_visual_candidates():
     visual_candidates = []
     if not st.session_state.get('lineage_data'):
         return []
+    
+
+    # Fetch mappings and resolved choices from session state to use within the function
+    column_mappings = st.session_state.get('column_mappings', {})
+    expression_to_pbi_map = column_mappings.get('expression_to_powerbi', {})
+    resolved_base_col_to_pbi = st.session_state.get('resolved_base_col_to_pbi', {})
+
 
     for item_vis_conf in st.session_state['lineage_data']:
         if item_vis_conf.get('type') == 'filter_condition': # Skip filter conditions
@@ -102,6 +109,8 @@ def build_visual_candidates():
             continue
 
         is_analyzer_expression_type = item_vis_conf['type'] == 'expression'
+
+        effective_type_is_expression = is_analyzer_expression_type
         original_sql_content_for_expr = item_vis_conf.get('final_expression')
         base_columns_from_lineage = item_vis_conf.get('base_columns')
         pbi_options_for_item = []
@@ -164,31 +173,54 @@ def build_visual_candidates():
                     'original_sql_expression': None
                 })
         else:
-            # Type is "expression"
-            display_label_for_dropdown = sql_name # Always show SQL alias for expressions in dropdown
-
-            # Determine the actual PBI DAX reference for this expression
-            actual_pbi_dax_reference = original_sql_content_for_expr or sql_name # Default
-            made_change = False
+            # --- NEW AND EXISTING LOGIC FOR EXPRESSIONS ---
+            direct_pbi_matches = None
+            final_lookup_key = None
             if original_sql_content_for_expr:
-                translated_expr, made_change = generate_powerbi_equivalent_formula(
-                    original_sql_content_for_expr,
-                    base_columns_from_lineage,
-                    st.session_state['column_mappings']
-                )
-                if made_change:
-                    actual_pbi_dax_reference = translated_expr
-                # else, actual_pbi_dax_reference remains original_sql_content_for_expr
+                # 1. First, check for a direct mapping for the entire expression.
+                expression_for_lookup = original_sql_content_for_expr
 
-            pbi_options_for_item.append({
-                'display_label': display_label_for_dropdown,
-                'pbi_dax_reference': actual_pbi_dax_reference,
-                'is_expression_translation': made_change if original_sql_content_for_expr else False,
-                'original_sql_expression': original_sql_content_for_expr,
-                'original_sql_column_alias': sql_name
-            })
+                if base_columns_from_lineage:
+                    sorted_base_cols = sorted(base_columns_from_lineage, key=len, reverse=True)
+                    for base_col in sorted_base_cols:
+                        normalized_base_col = base_col.replace('PROD.', '').replace('"', '')
+                        expression_for_lookup = expression_for_lookup.replace(base_col, normalized_base_col)
+                
+                # Normalize the final key for a robust lookup (lowercase, single spaces).
+                # This assumes keys in your JSON are also stored in this normalized format.
+                final_lookup_key = ' '.join(expression_for_lookup.upper().split())
+                
+                for map_key, map_value in expression_to_pbi_map.items():
+                    if final_lookup_key == map_key:
+                        direct_pbi_matches = map_value
+                        break # Found a match, exit the loop
 
-        # Add to visual_candidates
+                if direct_pbi_matches:
+                    effective_type_is_expression = False
+                    # Direct mapping found. Treat it like a base column with one or more options.
+                    for match in direct_pbi_matches:
+                        tbl, col = match.get("table"), match.get("column")
+                        if tbl and col:
+                            pbi_dax_ref = f"'{tbl}'[{col}]"
+                            pbi_options_for_item.append({'display_label': pbi_dax_ref, 'pbi_dax_reference': pbi_dax_ref, 'table': tbl, 'column': col, 'is_expression_translation': False, 'original_sql_column_alias': sql_name, 'original_sql_expression': original_sql_content_for_expr})
+                else:
+                    # 2. No direct mapping, fall back to base column replacement logic
+                    display_label_for_dropdown = sql_name
+                    actual_pbi_dax_reference = original_sql_content_for_expr or sql_name
+                    made_change = False
+                    if original_sql_content_for_expr:
+                        translated_expr, made_change = generate_powerbi_equivalent_formula(
+                            original_sql_content_for_expr,
+                            base_columns_from_lineage,
+                            column_mappings,
+                            resolved_base_col_to_pbi  # Pass resolved choices for accurate translation
+                        )
+                        if made_change:
+                            actual_pbi_dax_reference = translated_expr
+
+                    pbi_options_for_item.append({'display_label': display_label_for_dropdown, 'pbi_dax_reference': actual_pbi_dax_reference, 'is_expression_translation': made_change, 'original_sql_expression': original_sql_content_for_expr, 'original_sql_column_alias': sql_name})
+
+        # --- COMMON LOGIC TO FINALIZE CANDIDATE ---
         if pbi_options_for_item:
             default_chosen_display_label = pbi_options_for_item[0]['display_label']
             default_chosen_pbi_dax_reference = pbi_options_for_item[0]['pbi_dax_reference']        
@@ -203,7 +235,7 @@ def build_visual_candidates():
             visual_candidates.append({
                 'id': sql_name,
                 'sql_name': sql_name,
-                'is_sql_expression_type_from_analyzer': is_analyzer_expression_type,
+                'is_sql_expression_type_from_analyzer': effective_type_is_expression,
                 'pbi_options': pbi_options_for_item,
                 'chosen_display_label': default_chosen_display_label,
                 'chosen_pbi_dax_reference': default_chosen_pbi_dax_reference
@@ -213,44 +245,50 @@ def build_visual_candidates():
 
 
 def enrich_selected_items(selected_labels):
+    """
+    Enriches the user-selected labels with detailed info from the candidates list.
+    This version correctly uses the pre-calculated 'chosen_pbi_dax_reference' and
+    the final 'is_sql_expression_type_from_analyzer' flag, avoiding any re-translation.
+    """
     import re
     enriched = []
     for label in selected_labels:
+        # Find the full candidate object that corresponds to the selected label
         candidate = next((c for c in st.session_state.get('visual_config_candidates', []) if c.get('chosen_display_label') == label), None)
-        if candidate:
-            entry = {
-                "label": label, # This is the chosen_display_label
-                "type": "expression" if candidate.get("is_sql_expression_type_from_analyzer") else "base",
-                "sql_name": candidate.get("sql_name"), # Original SQL alias/name from 'item'
-                "pbi_expression": None,
-                "pbi_table": None, 
-                "pbi_column": None 
-            }
-            if entry["type"] == "expression":
-                # Find the original lineage item using the 'sql_name' (which was item_vis_conf['item'])
-                # Use .get('item') for safety and consistency
-                lineage_item = next((item for item in st.session_state.get('lineage_data', []) if item.get('item') == candidate.get("sql_name")), None)
-                if lineage_item:
-                    orig_sql_expr = lineage_item.get('final_expression')
-# ...existing code...
-                    base_columns = lineage_item.get('base_columns', [])
-                    if orig_sql_expr and base_columns:
-                        pbi_expr, _ = generate_powerbi_equivalent_formula(
-                            orig_sql_expr,
-                            base_columns,
-                            st.session_state['column_mappings'],
-                            st.session_state.get('resolved_base_col_to_pbi', {})
-                        )
-                        entry["pbi_expression"] = pbi_expr
-                        # Try to extract the first table name from the translated PBI expression
-                        if pbi_expr:
-                            match_table = re.search(r"'([^']+?)'\[[^\]]+?\]", pbi_expr)
-                            if match_table:
-                                entry["pbi_table"] = match_table.group(1)
-            else: # type is "base"
-                m = re.match(r"'(.+?)'\[(.+?)\]", label)
-                if m:
-                    entry["pbi_table"] = m.group(1)
-                    entry["pbi_column"] = m.group(2)
-            enriched.append(entry)
+        
+        if not candidate:
+            continue
+
+        # The candidate already has the correct DAX reference. We just use it.
+        pbi_expression = candidate.get('chosen_pbi_dax_reference')
+        
+        # The candidate also has the correct final type.
+        is_expression_type = candidate.get("is_sql_expression_type_from_analyzer", False)
+
+        entry = {
+            "label": label,
+            "type": "expression" if is_expression_type else "base",
+            "sql_name": candidate.get("sql_name"),
+            "pbi_expression": pbi_expression, # Use the pre-calculated value
+            "pbi_table": None,
+            "pbi_column": None
+        }
+
+        # For base types (which now includes our directly-mapped expressions),
+        # parse out the table and column for convenience.
+        if pbi_expression:
+            if is_expression_type:
+                # For complex expressions, search for the first table reference. We don't need the column.
+                match = re.search(r"'([^']+)'\[", pbi_expression)
+                if match:
+                    entry["pbi_table"] = match.group(1)
+            else:
+                # For base types, the string should match the 'Table'[Column] format exactly.
+                match = re.match(r"^\s*'([^']+)'\[([^\]]+)\]\s*$", pbi_expression)
+                if match:
+                    entry["pbi_table"] = match.group(1)
+                    entry["pbi_column"] = match.group(2)
+        
+        enriched.append(entry)
+        
     return enriched
