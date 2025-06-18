@@ -388,7 +388,16 @@ def display_visual_configuration_section():
                         else:
                             usages.append(f"Column: `{item.get('item', 'N/A')}` (Type: {item.get('type', 'N/A')})")
                 
-
+                # --- NEW: Find Cognos mappings for this base_col ---
+                cognos_mappings_display = []
+                db_to_cognos_map = st.session_state.get('column_mappings', {}).get('db_to_cognos', {})
+                normalized_base_col = normalize_column_identifier(base_col)
+                if normalized_base_col in db_to_cognos_map:
+                    cognos_matches = db_to_cognos_map[normalized_base_col]
+                    for cg_match in cognos_matches:
+                        table = cg_match.get('table', 'N/A')
+                        column = cg_match.get('column', 'N/A')
+                        cognos_mappings_display.append(f"`[{table}].[{column}]`")
 
                 if options: # Only show radio if there are options
                     chosen = st.radio(
@@ -404,6 +413,12 @@ def display_visual_configuration_section():
                     # Display usages above the radio
                     if usages:
                         st.markdown("**Used in:**<br>" + "<br>".join(usages), unsafe_allow_html=True)
+
+                    if cognos_mappings_display:
+                        st.markdown("**Cognos Mappings:**")
+                        for cg_map_str in cognos_mappings_display:
+                            st.markdown(f"&nbsp;&nbsp;• {cg_map_str}", unsafe_allow_html=True)
+
         else:
             st.caption("No base column ambiguities found or all have single PBI mappings.")
 
