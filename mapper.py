@@ -16,7 +16,8 @@ class PowerBIColumnMapper:
         self.model_data = self._load_model_file()
         self.mappings = {
             "db_to_powerbi": {},  # Database column -> PowerBI column
-            "powerbi_to_db": {}   # PowerBI column -> Database column
+            "powerbi_to_db": {},   # PowerBI column -> Database column
+            "expression_to_powerbi": {}  # <-- new mapping
         }
     
     def _load_model_file(self) -> Dict:
@@ -71,14 +72,15 @@ class PowerBIColumnMapper:
             
             # Process each column from the lineage results
             for item in lineage_results:
-                column_name = item['column']
+                column_name = item['item']
                 column_type = item['type']
                 base_columns = item['base_columns']
+
+                powerbi_column = f"{table_name}.{column_name}"
                 
                 # Only proceed if this is a direct column (not an expression)
                 if column_type == "base":
-                    powerbi_column = f"{table_name}.{column_name}"
-                    
+
                     # For each base column
                     for db_column in base_columns:
                         # Clean up the column name
@@ -100,7 +102,18 @@ class PowerBIColumnMapper:
                             "db_column": clean_db_column
                         })
                         
-                        columns_mapped += 1
+                elif column_type == "expression":
+                    final_expression = item.get("final_expression")
+                    if not final_expression:
+                        continue
+                    if final_expression not in self.mappings["expression_to_powerbi"]:
+                        self.mappings["expression_to_powerbi"][final_expression] = []
+                    self.mappings["expression_to_powerbi"][final_expression].append({
+                        "powerbi_column": powerbi_column,
+                        "table": table_name,
+                        "column": column_name
+                    })
+                    columns_mapped += 1
             
             return columns_mapped
             

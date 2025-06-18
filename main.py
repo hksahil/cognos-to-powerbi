@@ -273,7 +273,235 @@ GROUP BY
     "D1"."C9"
     """
 
+    query2 = """
+    SELECT  
+    ORIG_CO_CD || '$' || SALES_ORG_CD || '$' || PROFIT_CNTR_ID AS "ORIG_CO_CD_SALES_ORG_CD_PROFIT_CNTR_ID_JOIN_KEY",
+    ORIG_SYS_ID || '$' || OTC_MART.MONTH_DT || '$' || OTC_MART.MATL_ID AS "ORIG_SYS_ID_MONTH_DT_MATL_ID_JOIN_KEY",
+    ORIG_SYS_ID || '$' || PAY_CUST_ID_KEY  AS "ORIG_SYS_ID_PAY_CUST_ID_KEY_JOIN_KEY",
+    ORIG_SYS_ID || '$' || PAY_CUST_ID  AS "ORIG_SYS_ID_PAY_CUST_ID_JOIN_KEY",
+    ORIG_SYS_ID || '$' || COB_DISTR_CHAN_CD  AS "ORIG_SYS_ID_COB_DISTR_CHAN_CD_JOIN_KEY",
+    ORIG_SYS_ID || '$' || SALES_ORG_CD|| '$' || DISTR_CHAN_CD || '$' || PAY_CUST_ID AS "ORIG_SYS_ID_SALES_ORG_CD_DISTR_CHAN_CD_PAY_CUST_ID_JOIN_KEY",
+    OTC_MART.MATL_ID || '$' || CNTRY_NAME_CD  AS "MATL_ID_CNTRY_NAME_CD_JOIN_KEY",
+    ORIG_SYS_ID || '$' || SALES_ORG_CD || '$' || OTC_MART.ORIG_CO_CD AS "ORIG_SYS_ID_SALES_ORG_CD_ORIG_CO_CD_JOIN_KEY",
+    OTC_MART.ORIG_SYS_ID || '$' || SHIP_TO_CUST_ID  AS "ORIG_SYS_ID_SHIP_TO_CUST_ID_JOIN_KEY",
+    ORIG_SYS_ID || '$' || SALES_ORG_CD|| '$' || DISTR_CHAN_CD || '$' || SHIP_TO_CUST_ID AS "ORIG_SYS_ID_SALES_ORG_CD_DISTR_CHAN_CD_SHIP_TO_CUST_ID_JOIN_KEY",
+    OTC_MART.ORIG_SYS_ID || '$' || SOLD_TO_CUST_ID  AS "ORIG_SYS_ID_SOLD_TO_CUST_ID_JOIN_KEY",
+    ORIG_SYS_ID || '$' || SALES_ORG_CD|| '$' || DISTR_CHAN_CD || '$' || SOLD_TO_CUST_ID AS "ORIG_SYS_ID_SALES_ORG_CD_DISTR_CHAN_CD_SOLD_TO_CUST_ID_JOIN_KEY",
+    OTC_MART.ORIG_SYS_ID || '$' || SOLD_TO_CUST_ID || '$' || OTC_MART.MATL_ID AS "ORIG_SYS_ID_SOLD_TO_CUST_ID_MATL_ID_JOIN_KEY",
+    OTC_MART.ORIG_SYS_ID || '$' || SALES_ORG_CD|| '$' || DISTR_CHAN_CD || '$' || OTC_MART.MATL_ID AS "ORIG_SYS_ID_SALES_ORG_CD_DISTR_CHAN_CD_MATL_ID_JOIN_KEY",
+    IFNULL(OTC_MART.SLSMN_ID,'') || '$' || IFNULL(SLSMN_HIER_LVL_1_ID,'') || '$' || IFNULL(SLSMN_HIER_LVL_2_ID,'') || '$' || IFNULL(SLSMN_HIER_LVL_3_ID,'') AS "SLSMN_ID_SLSMN_HIER_LVL_1_ID_SLSMN_HIER_LVL_2_ID_SLSMN_HIER_LVL_3_ID_JOIN_KEY",
+    IFNULL(OTC_MART.PAY_SLSMN_ID,'') || '$' || IFNULL(PAY_SLSMN_HIER_LVL_1_ID,'') || '$' || IFNULL(PAY_SLSMN_HIER_LVL_2_ID,'') || '$' || IFNULL(PAY_SLSMN_HIER_LVL_3_ID,'') AS "PAY_SLSMN_ID_PAY_SLSMN_HIER_LVL_1_ID_PAY_SLSMN_HIER_LVL_2_ID_PAY_SLSMN_HIER_LVL_3_ID_JOIN_KEY",
+    IFNULL(OTC_MART.MONTH_DT,'1900-01-01')  || '$' || IFNULL(OTC_MART.CNTRY_NAME_CD,'1900-01-01')  AS "MONTH_DT_CNTRY_NAME_CD_JOIN_KEY",
+    
+    OTC_MART.BUS_INQR_QTY AS "Business_Inquiry_Qty", 
+    OTC_MART.ORD_QTY AS "Order_Qty(Not Cancelled)", 
+    OTC_MART.DELIV_QTY AS "Shipped_Units", 
+    OTC_MART.FORC_DELIV_QTY AS "Estimated_Shipped_Units", 
+    OTC_MART.SLS_QTY AS "Billed_Units", 
+    OTC_MART.EXCL_FOC_ITM_SLS_QTY AS "Billed_Qty_excl_ZZFC", 
+    OTC_MART.LAST_WRK_DAY_ORD_QTY AS "Order_Qty(Prior Working Day)", 
+    OTC_MART.LAST_WRK_DAY_DELIV_QTY AS "Shipped_Units(Prior Working Day)", 
+    OTC_MART.LAST_WRK_DAY_SLS_QTY AS "Billed_Units(Prior Working Day)", 
+    OTC_MART.AOP_SALES_QTY AS "AOP_Qty", 
+    OTC_MART.PAY_TGT_UNIT_QTY AS "Payer - AOP_Qty",
+    OTC_MART.LST_EST_UNIT_QTY_1 AS "Latest_Estimate_1 - AOP_Qty", 
+    OTC_MART.LST_EST_UNIT_QTY_2 AS "Latest_Estimate_2 - AOP_Qty", 
+    OTC_MART.CONSENSUS_FORC_CLOS_LAG_1_QTY AS "Lag_1_PBU_MOR", 
+    OTC_MART.CONSENSUS_FORC_CLOS_LAG_2_QTY AS "Lag_2_PBU_MOR", 
+    OTC_MART.CONSENSUS_FORC_CLOS_LAG_3_QTY AS "Lag_3_PBU_MOR", 
+    OTC_MART.CONSENSUS_FORC_CLOS_LAG_6_QTY AS "Lag_6_PBU_MOR", 
+    OTC_MART.CNTRY_SLS_FORC_CLOS_LAG_2_QTY AS "Lag_2_Closing_Country_Sales_View", 
+    OTC_MART.CNTRY_PRLMNRY_FORC_LAG_2_QTY AS "Lag_2_Country_Preliminary_FC", 
+    OTC_MART.ADJ_DMAN_PLN_FORC_LAG_1_QTY AS "Lag_1_Adjusted_DP", 
+    OTC_MART.ADJ_DMAN_PLN_FORC_LAG_2_QTY AS "Lag_2_Adjusted_DP", 
+    OTC_MART.ADJ_DMAN_PLN_FORC_LAG_3_QTY AS "Lag_3_Adjusted_DP",
+    OTC_MART.PBU_CNSS_FORC_LAG_2_QTY AS "Lag_2_PBU_Consensus_FC", 
+    OTC_MART.MATL_AVAIL_DT_ORD_QTY AS "Order_Qty(Material Avail. Date)", 
+    OTC_MART.MATL_AVAIL_DT_CNFRM_QTY AS "Confirmed_Qty(Material Avail. Date)", 
+    OTC_MART.MATL_AVAIL_DT_OPEN_ORD_QTY AS "Open_Order_Qty(Material Avail. Date)", 
+    OTC_MART.MATL_AVAIL_DT_OPEN_ORD_UNCNFRM_QTY AS "Open_Unconfirmed_Qty(Material Avail. Date)", 
+    OTC_MART.MATL_AVAIL_DT_OPEN_DELIV_QTY AS "Open_Delivery_Qty(Material Avail. Date)", 
+    OTC_MART.PDD_RMAIN_OPEN_ORD_QTY AS "Open_Order_Qty(Promised Delivery Date)", 
+    OTC_MART.WAIT_LIST_1_BUS_INQR_QTY AS "Business_Inquiry_WLI_1_fRDD_Qty", 
+    OTC_MART.WAIT_LIST_2_BUS_INQR_QTY AS "Business_Inquiry_WLI_2_fRDD_Qty", 
+    OTC_MART.WAIT_LIST_3_BUS_INQR_QTY AS "Business_Inquiry_WLI_3_fRDD_Qty", 
+    OTC_MART.WAIT_LIST_4_BUS_INQR_QTY AS "Business_Inquiry_WLI_4_fRDD_Qty", 
+    OTC_MART.WAIT_LIST_WTHT_CD_BUS_INQR_QTY AS "Business_Inquiry_no_WLI_RDD_Qty",
+    OTC_MART.REJ_GDYR_ORD_BUS_INQR_QTY AS "Rejected_GDT", 
+    OTC_MART.REJ_CUST_ORD_BUS_INQR_QTY AS "Rejected_Customer", 
+    OTC_MART.PGI_ON_DELIV_QTY AS "Open_PGI_by_Planned_PGI_Date", 
+    OTC_MART.PGI_OPEN_ORD_QTY AS "Open_Orders_by_Planned_PGI_Date", 
+    OTC_MART.THRD_PTY_ORD_QTY AS "ZGTA_ZGRE_Order_Qty", 
+    OTC_MART.DMAN_QTY AS "Demand_Qty", 
+    OTC_MART.FULFILL_GAP_QTY AS "Fulfilment_Gap_Qty", 
+    OTC_MART.PGI_OPEN_ORD_RTRN_QTY AS "PGI_Open_Order_Return_Qty", 
+    OTC_MART.DELIV_RTRN_QTY AS "Delivery_Return_Qty",
+    OTC_MART.NET_SLS_AMT AS "Net_Sales", 
+    0 AS "Ecotaxes_Net_Sales", 
+    0 AS "Management_Cost", 
+    0 AS "Imported_Product_Cost", 
+    0 AS "Cost_To_Serve_Freight", 
+    0 AS "Cost_To_Serve_VAS", 
+    OTC_MART.COST_OF_SLS_AMT AS "Cost_of_Sales", 
+    OTC_MART.GROSS_PRFT_AMT AS "Gross_Profit", 
+    OTC_MART.PAY_TGT_NET_SLS_AMT AS "Payer_AOP_Net_Sales", 
+    OTC_MART.PAY_TGT_GROSS_PRFT_AMT AS "Payer - AOP_Gross_Profit", 
+    OTC_MART.LST_EST_NET_SLS_AMT_1 AS "Latest_Estimate_1 - AOP_Net_Sales", 
+    OTC_MART.LST_EST_GROSS_PRFT_AMT_1 AS "Latest_Estimate_1 - AOP_Gross_Profit",
+    OTC_MART.LST_EST_NET_SLS_AMT_2 AS "Latest_Estimate_2 - AOP_Net_Sales", 
+    OTC_MART.LST_EST_GROSS_PRFT_AMT_2 AS "Latest_Estimate_2 - AOP_Gross_Profit", 
+    CAST(OTC_MART.LIST_PRC_AMT AS FLOAT) * OTC_MART.GRP_TO_LCL_EXCHG_RT AS "List_Price(Local)", 
+    CAST(OTC_MART.DISC_AMT AS FLOAT) * OTC_MART.GRP_TO_LCL_EXCHG_RT AS "Discounts(Local)", 
+    CAST(OTC_MART.CASING_DISC_AMT AS FLOAT) * OTC_MART.GRP_TO_LCL_EXCHG_RT AS "Casing_Discount(Local)", 
+    CAST(OTC_MART.REBATE_AMT AS FLOAT) * OTC_MART.GRP_TO_LCL_EXCHG_RT AS "Rebates(Local)", 
+    CAST(OTC_MART.LEASE_AMT AS FLOAT) * OTC_MART.GRP_TO_LCL_EXCHG_RT AS "Leasing(Local)", 
+    CAST(OTC_MART.INVC_LVL_AMT AS FLOAT) * OTC_MART.GRP_TO_LCL_EXCHG_RT AS "Invoice_Level(Local)", 
+    CAST(OTC_MART.INVC_LVL_INCL_FOC_DISC_AMT AS FLOAT) * OTC_MART.GRP_TO_LCL_EXCHG_RT AS "Invoice_Level_Including_FOC(Local)", 
+    CAST(OTC_MART.INVC_LVL_GROSS_AMT AS FLOAT) * OTC_MART.GRP_TO_LCL_EXCHG_RT AS "Invoice_Level_Gross(Local)", 
+    CAST(OTC_MART.REBATE_CALC_GROSS_AMT AS FLOAT) * OTC_MART.GRP_TO_LCL_EXCHG_RT AS "Rebate_Base - Gross(Local)",
+    CAST(OTC_MART.GROSS_EX_NET_DEAL_AMT AS FLOAT) * OTC_MART.GRP_TO_LCL_EXCHG_RT AS "Rebate_Base - Gross_Excluding_Net_Deals(Local)", 
+    CAST(OTC_MART.NET_AMT AS FLOAT) * OTC_MART.GRP_TO_LCL_EXCHG_RT AS "Rebate_Base - Net_Excluding_Surcharges(Local)", 
+    CAST(OTC_MART.NET_EX_NET_DEAL_AMT AS FLOAT) * OTC_MART.GRP_TO_LCL_EXCHG_RT AS "Rebate_Base - Net_Excluding_Net_Deals(Local)", 
+    CAST(OTC_MART.NET_SLS_AMT AS FLOAT) * OTC_MART.GRP_TO_LCL_EXCHG_RT AS "Net_Sales(Local)", 
+    0 AS "Ecotaxes_Net_Sales(Local)", 
+    0 AS "Management_Cost(Local)", 
+    0 AS "Imported_Product_Cost(Local)", 
+    0 AS "Cost_To_Serve_Freight(Local)", 
+    0 AS "Cost_To_Serve_VAS(Local)", 
+    CAST(OTC_MART.COST_OF_SLS_AMT AS FLOAT) * OTC_MART.GRP_TO_LCL_EXCHG_RT AS "Cost_of_Sales(Local)", 
+    CAST(OTC_MART.GROSS_PRFT_AMT AS FLOAT) * OTC_MART.GRP_TO_LCL_EXCHG_RT AS "Gross_Profit(Local)",
+    CAST(OTC_MART.PAY_TGT_NET_SLS_AMT AS FLOAT) * OTC_MART.GRP_TO_LCL_EXCHG_RT AS "Payer - AOP_Net_Sales(Local)", 
+    CAST(OTC_MART.PAY_TGT_GROSS_PRFT_AMT AS FLOAT) * OTC_MART.GRP_TO_LCL_EXCHG_RT AS "Payer - AOP_Gross_Profit(Local)", 
+    CAST(OTC_MART.LST_EST_NET_SLS_AMT_1 AS FLOAT) * OTC_MART.GRP_TO_LCL_EXCHG_RT AS "Latest_Estimate_1 - AOP_Net_Sales(Local)", 
+    CAST(OTC_MART.LST_EST_GROSS_PRFT_AMT_1 AS FLOAT) * OTC_MART.GRP_TO_LCL_EXCHG_RT AS "Latest_Estimate_1 - AOP_Gross_Profit(Local)", 
+    CAST(OTC_MART.LST_EST_NET_SLS_AMT_2 AS FLOAT) * OTC_MART.GRP_TO_LCL_EXCHG_RT AS "Latest_Estimate_2 - AOP_Net_Sales(Local)", 
+    CAST(OTC_MART.LST_EST_GROSS_PRFT_AMT_2 AS FLOAT) * OTC_MART.GRP_TO_LCL_EXCHG_RT AS "Latest_Estimate_2 - AOP_Gross_Profit(Local)", 
+    OTC_MART.GRP_CRNCY_ID AS "Group Currency ID", 
+    OTC_MART.LCL_CRNCY_ID AS "Local Currency ID", 
+    OTC_MART.GRP_TO_LCL_EXCHG_RT AS "Group_to_Local_Exchange_Rate",
+    OTC_MART.MONTH_DT AS "Month Date", 
+    EXTRACT(YEAR FROM OTC_MART.MONTH_DT) AS "Year", 
+    CASE EXTRACT(MONTH FROM OTC_MART.MONTH_DT)
+        WHEN 1 THEN 'Q1'
+        WHEN 2 THEN 'Q1'
+        WHEN 3 THEN 'Q1'
+        WHEN 4 THEN 'Q2'
+        WHEN 5 THEN 'Q2'
+        WHEN 6 THEN 'Q2'
+        WHEN 7 THEN 'Q3'
+        WHEN 8 THEN 'Q3'
+        WHEN 9 THEN 'Q3'
+        WHEN 10 THEN 'Q4'
+        WHEN 11 THEN 'Q4'
+        WHEN 12 THEN 'Q4'
+        ELSE 'Q?'
+    END AS "Quarter", 
+    EXTRACT(YEAR FROM OTC_MART.MONTH_DT) || ' / ' || CASE EXTRACT(MONTH FROM OTC_MART.MONTH_DT)
+        WHEN 1 THEN 'Q1'
+        WHEN 2 THEN 'Q1'
+        WHEN 3 THEN 'Q1'
+        WHEN 4 THEN 'Q2'
+        WHEN 5 THEN 'Q2'
+        WHEN 6 THEN 'Q2'
+        WHEN 7 THEN 'Q3'
+        WHEN 8 THEN 'Q3'
+        WHEN 9 THEN 'Q3'
+        WHEN 10 THEN 'Q4'
+        WHEN 11 THEN 'Q4'
+        WHEN 12 THEN 'Q4'
+        ELSE 'Q?'
+    END AS "Quarter (YYYY/QQ)", 
+    EXTRACT(MONTH FROM OTC_MART.MONTH_DT) AS "Month", 
+    EXTRACT(YEAR FROM OTC_MART.MONTH_DT) * 100 + EXTRACT(MONTH FROM OTC_MART.MONTH_DT) AS "Month(YYYYMM)", 
+    OTC_MART.REC_TYP_CD AS "Record Type", 
+    OTC_MART.DISTR_CHAN_CD AS "DISTR CHAN CD" , 
+    OTC_MART.PROFIT_CNTR_ID AS "Profit Center ID", 
+    OTC_MART.CNTRY_NAME_CD AS "Country Code",  
+    OTC_MART.CO_CD AS "Company Code", 
+    OTC_MART.SALES_ORG_CD AS "Sales Org Code",
+     OTC_MART.DESIGN AS "Design", 
+    OTC_MART.MATL_ID AS "Material ID",
+	OTC_MART.MATL_HIER_LVL_1_CD AS "Material Hierarchy Level 1 Code",
+        MATL_HIER_DESC_EN_EAGLE_CURR_1.HIER_LVL_DESC AS "Material Hierarchy Level 1 Desc", 
+        OTC_MART.MATL_HIER_LVL_1_CD || ' - ' || MATL_HIER_DESC_EN_EAGLE_CURR_1.HIER_LVL_DESC AS "Material Hierarchy Level 1 Label", 
+        OTC_MART.MATL_HIER_LVL_2_CD AS "Material Hierarchy Level 2 Code", 
+        MATL_HIER_DESC_EN_EAGLE_CURR_2.HIER_LVL_DESC AS "Material Hierarchy Level 2 Desc", 
+        OTC_MART.MATL_HIER_LVL_2_CD || ' - ' || MATL_HIER_DESC_EN_EAGLE_CURR_2.HIER_LVL_DESC AS "Material Hierarchy Level 2 Label", 
+        OTC_MART.MATL_HIER_LVL_3_CD AS "Material Hierarchy Level 3 Code", 
+        MATL_HIER_DESC_EN_EAGLE_CURR_3.HIER_LVL_DESC AS "Material Hierarchy Level 3 Desc", 
+        OTC_MART.MATL_HIER_LVL_3_CD || ' - ' || MATL_HIER_DESC_EN_EAGLE_CURR_3.HIER_LVL_DESC AS "Material Hierarchy Level 3 Label", 
+        OTC_MART.MATL_HIER_LVL_4_CD AS "Material Hierarchy Level 4 Code", 
+        MATL_HIER_DESC_EN_EAGLE_CURR_4.HIER_LVL_DESC AS "Material Hierarchy Level 4 Desc", 
+        OTC_MART.MATL_HIER_LVL_4_CD || ' - ' || MATL_HIER_DESC_EN_EAGLE_CURR_4.HIER_LVL_DESC AS "Material Hierarchy Level 4 Label",
+	OTC_MART.MATL_HIER_LVL_5_CD AS "Material Hierarchy Level 5 Code",
+        MATL_HIER_DESC_EN_EAGLE_CURR_5.HIER_LVL_DESC AS "Material Hierarchy Level 5 Desc", 
+        OTC_MART.MATL_HIER_LVL_5_CD || ' - ' || MATL_HIER_DESC_EN_EAGLE_CURR_5.HIER_LVL_DESC AS "Material Hierarchy Level 5 Label", 
+        OTC_MART.MATL_HIER_LVL_6_CD AS "Material Hierarchy Level 6 Code", 
+        MATL_HIER_DESC_EN_EAGLE_CURR_6.HIER_LVL_DESC AS "Material Hierarchy Level 6 Desc", 
+        OTC_MART.MATL_HIER_LVL_6_CD || ' - ' || MATL_HIER_DESC_EN_EAGLE_CURR_6.HIER_LVL_DESC AS "Material Hierarchy Level 6 Label", 
+        OTC_MART.MATL_HIER_LVL_7_CD AS "Material Hierarchy Level 7 Code", 
+        MATL_HIER_DESC_EN_EAGLE_CURR_7.HIER_LVL_DESC AS "Material Hierarchy Level 7 Desc", 
+        OTC_MART.MATL_HIER_LVL_7_CD || ' - ' || MATL_HIER_DESC_EN_EAGLE_CURR_7.HIER_LVL_DESC AS "Material Hierarchy Level 7 Label", 
+        OTC_MART.MATL_HIER_LVL_8_CD AS "Material Hierarchy Level 8 Code", 
+        MATL_HIER_DESC_EN_EAGLE_CURR_8.HIER_LVL_DESC AS "Material Hierarchy Level 8 Desc", 
+        OTC_MART.MATL_HIER_LVL_8_CD || ' - ' || MATL_HIER_DESC_EN_EAGLE_CURR_8.HIER_LVL_DESC AS "Material Hierarchy Level 8 Label",
+	 OTC_MART.SOLD_TO_CUST_ID AS "Sold To Customer ID", 
+    OTC_MART.CUST_ID_KEY AS "Sold To Customer ID Key", 
+    OTC_MART.SHIP_TO_CUST_ID AS "Ship To Customer ID", 
+    OTC_MART.SLSMN_ID AS "Selling Responsible ID", 
+    OTC_MART.SLSMN_HIER_LVL_1_ID AS "Manager of Selling Responsible ID", 
+    OTC_MART.SLSMN_HIER_LVL_2_ID AS "KAM Local Country ID", 
+    OTC_MART.SLSMN_HIER_LVL_3_ID AS "KAM Pan EU ID", 
+    OTC_MART.PAY_CUST_ID AS "Payer Customer ID", 
+    OTC_MART.PAY_CUST_ID_KEY AS "Payer Customer ID Key", 
+    OTC_MART.PAY_SLSMN_ID AS "Payer Selling Responsible ID", 
+    OTC_MART.PAY_SLSMN_HIER_LVL_1_ID AS "Payer Manager of Selling Responsible ID",
+    OTC_MART.PAY_SLSMN_HIER_LVL_2_ID AS "Payer KAM Local Country ID", 
+    OTC_MART.PAY_SLSMN_HIER_LVL_3_ID AS "Payer KAM Pan EU ID", 
+    OTC_MART.BRAND_ID AS "Brand ID", 
+    OTC_MART.PAK_ID AS "PAK ID", 
+    OTC_MART.CBU_CD AS "CBU Code", 
+    OTC_MART.SPU_ID AS "SPU ID", 
+    OTC_MART.ORIG_SYS_ID AS "Originating System ID",
+     EURONET_BY_MONTH.COND_RT_AMT * OTC_MART.SLS_QTY AS "Net_Euronet", 
+    CAST(OTC_MART.NET_SLS_AMT AS DOUBLE PRECISION) / NULLIF(EURONET_BY_MONTH.COND_RT_AMT * OTC_MART.SLS_QTY, 0) - 1 AS "Weighted_Euronet_Deviation", 
+    CAST(OTC_MART.NET_SLS_AMT AS DOUBLE PRECISION) / NULLIF(OTC_MART.SLS_QTY, 0) AS "ANSP_1", 
+    CAST(OTC_MART.GROSS_PRFT_AMT AS DOUBLE PRECISION) / NULLIF(OTC_MART.SLS_QTY, 0) AS "Gross_Profit_per_Tire", 
+    CAST(OTC_MART.NET_SLS_AMT AS FLOAT) * OTC_MART.GRP_TO_LCL_EXCHG_RT / NULLIF(OTC_MART.SLS_QTY, 0) AS "ANSP(Local)", 
+    CAST(OTC_MART.GROSS_PRFT_AMT AS FLOAT) * OTC_MART.GRP_TO_LCL_EXCHG_RT / NULLIF(OTC_MART.SLS_QTY, 0) AS  "Gross_Profit_per_Tire(Local)", 
+    DATE_TRUNC('MONTH', CURRENT_DATE) AS "Current Month Start Date", 
+    LAST_DAY(CURRENT_DATE) AS "Current Month End Date", 
+    DATE_TRUNC('month', DATEADD('month', -1, CURRENT_DATE)) AS "Prior Month Start Date", 
+    LAST_DAY(DATE_TRUNC('month', DATEADD('month', -1, CURRENT_DATE))) AS "Prior Month End Date"
+   
+    
+FROM
+    EU_BI_VWS.OTC_MART OTC_MART
+	LEFT OUTER JOIN EU_BI_VWS.EURONET_MTH_SAP EURONET_BY_MONTH
+        ON 
+            OTC_MART.MATL_ID = EURONET_BY_MONTH.MATL_ID AND
+            OTC_MART.MONTH_DT =EURONET_BY_MONTH.MONTH_DT
+  
+   	LEFT OUTER JOIN EU_BI_VWS.MATL_HIER_DESC_EN_EAGLE_CURR_1 MATL_HIER_DESC_EN_EAGLE_CURR_1
+            ON MATL_HIER_DESC_EN_EAGLE_CURR_1.HIER_LVL_CD = OTC_MART.MATL_HIER_LVL_1_CD
+                LEFT OUTER JOIN EU_BI_VWS.MATL_HIER_DESC_EN_EAGLE_CURR_2 MATL_HIER_DESC_EN_EAGLE_CURR_2
+                ON MATL_HIER_DESC_EN_EAGLE_CURR_2.HIER_LVL_CD = OTC_MART.MATL_HIER_LVL_2_CD
+                    LEFT OUTER JOIN EU_BI_VWS.MATL_HIER_DESC_EN_EAGLE_CURR_3 MATL_HIER_DESC_EN_EAGLE_CURR_3
+                    ON MATL_HIER_DESC_EN_EAGLE_CURR_3.HIER_LVL_CD = OTC_MART.MATL_HIER_LVL_3_CD
+                        LEFT OUTER JOIN EU_BI_VWS.MATL_HIER_DESC_EN_EAGLE_CURR_4 MATL_HIER_DESC_EN_EAGLE_CURR_4
+                        ON MATL_HIER_DESC_EN_EAGLE_CURR_4.HIER_LVL_CD = OTC_MART.MATL_HIER_LVL_4_CD
+	LEFT OUTER JOIN EU_BI_VWS.MATL_HIER_DESC_EN_EAGLE_CURR_5 MATL_HIER_DESC_EN_EAGLE_CURR_5
+            ON MATL_HIER_DESC_EN_EAGLE_CURR_5.HIER_LVL_CD = OTC_MART.MATL_HIER_LVL_5_CD
+                LEFT OUTER JOIN EU_BI_VWS.MATL_HIER_DESC_EN_EAGLE_CURR_6 MATL_HIER_DESC_EN_EAGLE_CURR_6
+                ON MATL_HIER_DESC_EN_EAGLE_CURR_6.HIER_LVL_CD = OTC_MART.MATL_HIER_LVL_6_CD
+                    LEFT OUTER JOIN EU_BI_VWS.MATL_HIER_DESC_EN_EAGLE_CURR_7 MATL_HIER_DESC_EN_EAGLE_CURR_7
+                    ON MATL_HIER_DESC_EN_EAGLE_CURR_7.HIER_LVL_CD = OTC_MART.MATL_HIER_LVL_7_CD
+                        LEFT OUTER JOIN EU_BI_VWS.MATL_HIER_DESC_EN_EAGLE_CURR_8 MATL_HIER_DESC_EN_EAGLE_CURR_8
+                        ON MATL_HIER_DESC_EN_EAGLE_CURR_8.HIER_LVL_CD = OTC_MART.MATL_HIER_LVL_8_CD
+--WHERE YEAR(OTC_MART.MONTH_DT )>= YEAR(CURRENT_DATE())- 1
+
+    """
     print("--- Query analysis including WHERE clause ---")
-    analyzer = SQLLineageAnalyzer(full_query)
+    analyzer = SQLLineageAnalyzer(query2)
     lineage_data = analyzer.analyze()
     print(json.dumps(lineage_data, indent=2))

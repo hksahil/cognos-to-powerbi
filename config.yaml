@@ -12,11 +12,9 @@ report:
   - {name: Billed_Units Measure, table: Order To Cash (OTC), expression: 'SUM(''Order
       To Cash (OTC)''[Billed_Units])', dataType: decimal number}
   visuals:
-  - type: matrix
+  - type: table
     position: {x: 28.8, y: 100, width: 1220, height: 800}
-    rows: []
-    columns: []
-    values:
+    fields:
     - {name: Billed_Units Measure, table: Order To Cash (OTC), type: Measure}
     filters:
     - {field: {name: Company ID, table: Country, type: column}, filterType: Categorical,
