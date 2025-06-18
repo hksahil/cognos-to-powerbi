@@ -9,19 +9,19 @@ report:
   title: {text: My Report}
   data_refresh: {table: Date Refresh Table, column: UPDATED_DATE}
   measures:
-  - {name: Billed_Units Measure, table: Order To Cash (OTC), expression: 'SUM(''Order
-      To Cash (OTC)''[Billed_Units])', dataType: decimal number}
+  - {name: Payer___AOP_Qty Measure, table: Order To Cash (OTC), expression: 'SUM(''Order
+      To Cash (OTC)''[Payer - AOP_Qty])', dataType: decimal number}
   visuals:
   - type: table
     position: {x: 28.8, y: 100, width: 1220, height: 800}
     fields:
-    - {name: Billed_Units Measure, table: Order To Cash (OTC), type: Measure}
+    - {name: Payer Hierarchy Level 1 Label, table: Payer Customer (Hierarchy), type: Column}
+    - {name: Payer Hierarchy Level 3 Label, table: Payer Customer (Hierarchy), type: Column}
+    - {name: Payer___AOP_Qty Measure, table: Order To Cash (OTC), type: Measure}
     filters:
     - {field: {name: Company ID, table: Country, type: column}, filterType: Categorical,
-      values: [E211]}
+      values: [E211, E320, E667]}
     - {field: {name: Distribution Channel Code, table: Distribution Channel, type: column},
       filterType: Categorical, values: ['01']}
     - {field: {name: PAK Hierarchy Level 1 Code, table: Product Aggregation Key (PAK),
         type: column}, filterType: Categorical, values: ['10']}
-    - {field: {name: Payer Hierarchy Level 4 ID, table: Payer Customer (Hierarchy),
-        type: column}, filterType: Categorical, values: [DE4RENZENT]}
