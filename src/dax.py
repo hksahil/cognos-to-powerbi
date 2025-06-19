@@ -99,6 +99,8 @@ def generate_dax_from_sql(sql_expression):
             'dataType': 'text'  # Default dataType
         }
 
+        # print(response)
+
         measure_marker = "MEASURE:"
         calc_col_marker = "CALCULATED_COLUMN:"
         rec_marker = "RECOMMENDATION:"
