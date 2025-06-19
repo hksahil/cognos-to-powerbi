@@ -71,7 +71,7 @@ def generate_and_run_pbi_automation():
                     "position": FlowDict({"x": 28.8, "y": 100, "width": 1220, "height": 800}),
                     "rows": [FlowDict({"name": item['column'], "table": item['table'], "type": "Column"}) for item in visual_config.get('rows', []) if item['type'] == 'Column'],
                     "columns": [FlowDict({"name": item['column'], "table": item['table'], "type": "Column"}) for item in visual_config.get('columns', []) if item['type'] == 'Column'],
-                    "values": [FlowDict({"name": f"{item['column']} Measure", "table": item['table'], "type": "Measure"}) for item in visual_config.get('values', []) if item['type'] == 'Measure'],
+                    "values": [FlowDict({"name": f"{item['column']} Measure", "table": item['table'], "type": "Measure"}) for item in visual_config.get('values', []) if item['type'] == 'Measure'], # TODO: Should only measures be in Values?
                     "filters": transformed_filters
                 }
                 visuals.append(matrix_def)
@@ -85,8 +85,8 @@ def generate_and_run_pbi_automation():
         st.success("`config.yaml` content generated successfully!")
 
         # --- 5. Save config locally and run PBI Automation script ---
-        app_dir = Path(__file__).parent
-        local_config_path = app_dir / "config.yaml"
+        app_dir = Path(__file__).parent.parent.parent
+        local_config_path = app_dir / "dump/config.yaml"
         with open(local_config_path, 'w', encoding='utf-8') as f:
             f.write(st.session_state['generated_pbi_config'])
         st.info(f"Generated `config.yaml` saved to: {local_config_path}")
