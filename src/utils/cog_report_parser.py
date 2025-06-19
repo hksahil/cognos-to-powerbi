@@ -52,12 +52,17 @@ def extract_cognos_report_info(xml_data):
                 "filters": []
             }
 
-            # Get the names of the data items used in rows and columns from the visual
-            row_item_names_raw = [item.get('refDataItem') for item in visual.findall('.//d:crosstabRows//d:crosstabNodeMember', ns)]
-            col_item_names_raw = [item.get('refDataItem') for item in visual.findall('.//d:crosstabColumns//d:crosstabNodeMember', ns)]
+            row_items_with_seq = [
+                {'seq': i, 'name': item.get('refDataItem')} 
+                for i, item in enumerate(visual.findall('.//d:crosstabRows//d:crosstabNodeMember', ns))
+            ]
+            col_items_with_seq = [
+                {'seq': i, 'name': item.get('refDataItem')} 
+                for i, item in enumerate(visual.findall('.//d:crosstabColumns//d:crosstabNodeMember', ns))
+            ]
             # Remove duplicates while preserving order
-            row_item_names = list(dict.fromkeys(row_item_names_raw))
-            col_item_names = list(dict.fromkeys(col_item_names_raw))
+            # row_item_names = list(dict.fromkeys(row_item_names_raw))
+            # col_item_names = list(dict.fromkeys(col_item_names_raw))
 
 
             # Find the associated query to extract expressions and filters
@@ -85,29 +90,55 @@ def extract_cognos_report_info(xml_data):
                             "aggregation": aggregation
                         }
 
-                # Populate rows with name and expression
-                for name in row_item_names:
+                # Populate temporary lists first, which might contain duplicates
+                temp_rows = []
+                for item_data in row_items_with_seq:
+                    name = item_data['name']
                     item_details = data_item_map.get(name, {})
                     row_info = {
+                        "seq": item_data['seq'],
                         "name": name,
                         "expression": item_details.get("expression"),
                         "type": item_details.get("type")
                     }
                     if item_details.get('type') == 'measure':
                         row_info['aggregation'] = item_details.get('aggregation')
-                    visual_info['rows'].append(row_info)
+                    temp_rows.append(row_info)
 
-                # Populate columns with name and expression
-                for name in col_item_names:
+                temp_cols = []
+                for item_data in col_items_with_seq:
+                    name = item_data['name']
                     item_details = data_item_map.get(name, {})
                     col_info = {
+                        "seq": item_data['seq'],
                         "name": name,
                         "expression": item_details.get("expression"),
                         "type": item_details.get("type")
                     }
                     if item_details.get('type') == 'measure':
                         col_info['aggregation'] = item_details.get('aggregation')
-                    visual_info['columns'].append(col_info)
+                    temp_cols.append(col_info)
+
+                # --- NEW: Manually filter duplicates based on (name, expression) to preserve order ---
+                seen_rows = set()
+                unique_rows = []
+                for row in temp_rows:
+                    # Use a tuple of (name, expression) as the unique key
+                    unique_key = (row.get('name'), row.get('expression'))
+                    if unique_key not in seen_rows:
+                        seen_rows.add(unique_key)
+                        unique_rows.append(row)
+                visual_info['rows'] = unique_rows
+
+                seen_cols = set()
+                unique_cols = []
+                for col in temp_cols:
+                    # Use a tuple of (name, expression) as the unique key
+                    unique_key = (col.get('name'), col.get('expression'))
+                    if unique_key not in seen_cols:
+                        seen_cols.add(unique_key)
+                        unique_cols.append(col)
+                visual_info['columns'] = unique_cols
 
 
                 # Extract filters
@@ -135,7 +166,7 @@ def extract_cognos_report_info(xml_data):
 
 if __name__ == "__main__":
     # Use the path to your report.xml file
-    report_xml_path = r'/report.xml'
+    report_xml_path = r'../../data/report.xml'
     
     xml_content = None
     if not os.path.exists(report_xml_path):
