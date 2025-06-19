@@ -1,6 +1,8 @@
 import xml.etree.ElementTree as ET
 import json
 import os
+import re
+
 
 def extract_cognos_report_info(xml_data):
     """
@@ -51,8 +53,12 @@ def extract_cognos_report_info(xml_data):
             }
 
             # Get the names of the data items used in rows and columns from the visual
-            row_item_names = [item.get('refDataItem') for item in visual.findall('.//d:crosstabRows//d:crosstabNodeMember', ns)]
-            col_item_names = [item.get('refDataItem') for item in visual.findall('.//d:crosstabColumns//d:crosstabNodeMember', ns)]
+            row_item_names_raw = [item.get('refDataItem') for item in visual.findall('.//d:crosstabRows//d:crosstabNodeMember', ns)]
+            col_item_names_raw = [item.get('refDataItem') for item in visual.findall('.//d:crosstabColumns//d:crosstabNodeMember', ns)]
+            # Remove duplicates while preserving order
+            row_item_names = list(dict.fromkeys(row_item_names_raw))
+            col_item_names = list(dict.fromkeys(col_item_names_raw))
+
 
             # Find the associated query to extract expressions and filters
             query = root.find(f".//d:query[@name='{query_ref}']", ns)
@@ -105,8 +111,22 @@ def extract_cognos_report_info(xml_data):
 
 
                 # Extract filters
+                visual_info['filters'] = []
                 filter_elements = query.findall('.//d:detailFilter/d:filterExpression', ns)
-                visual_info['filters'] = [f.text for f in filter_elements if f.text]
+                for f_element in filter_elements:
+                    if f_element.text:
+                        full_expression = f_element.text.strip()
+                        
+                        # Regex to find a pattern like [Namespace].[Subject].[Item]
+                        # at the beginning of the filter string.
+                        match = re.match(r"(\s*\[.*?\](?:\.\[.*?\])*)", full_expression)
+                        column_involved = match.group(1).strip() if match else None
+
+                        filter_info = {
+                            "expression": full_expression,
+                            "column": column_involved
+                        }
+                        visual_info['filters'].append(filter_info)
 
             page_info['visuals'].append(visual_info)
         report_info['pages'].append(page_info)

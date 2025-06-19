@@ -209,9 +209,15 @@ def main():
                             break # Found a match, no need to check other expressions
 
         db_to_presentation_mapping = {}
+        cognos_to_db_mapping = {}
         for p_item in presentation_layer_data:
             db_name = p_item.get('database_name')
             if db_name and db_name != 'N/A':
+                # For cognos_to_db mapping (reverse of db_to_presentation)
+                presentation_key = f"{model_name}.{p_item['table']}.{p_item['column']}".lower()
+                cognos_to_db_mapping[presentation_key] = db_name
+
+                # For db_to_presentation mapping
                 presentation_info = {
                     'presentation_column': f"{p_item['table']}.{p_item['column']}",
                     'table': p_item['table'],
@@ -234,11 +240,11 @@ def main():
                 'generated_at': 'N/A',
                 'mappings': {}
             }
-
         # Step 2: Update the structure with new data and add db_to_cognos
-        output_json['model_name'] = model_name
         output_json['generated_at'] = pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')
         output_json['mappings']['db_to_cognos'] = db_to_presentation_mapping
+        output_json['mappings']['cognos_to_db'] = cognos_to_db_mapping
+
 
         # Write the updated JSON back to column_mappings.json
         with open('column_mappings.json', 'w') as f:
