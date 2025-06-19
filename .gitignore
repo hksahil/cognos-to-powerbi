@@ -7,4 +7,5 @@
 column_mappings.json
 tab-sql.json
 report.xml
+**/__pycache__/
 .env
