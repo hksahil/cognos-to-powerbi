@@ -6,6 +6,14 @@ from src.cog_rep import extract_cognos_report_info
 from src.dax import generate_dax_for_measure
 
 from dotenv import load_dotenv
+from pathlib import Path
+import subprocess
+import yaml
+from io import StringIO
+
+from src.utils import FlowDict, CustomDumper
+
+
 load_dotenv(dotenv_path='.env')
 
 
@@ -359,6 +367,127 @@ def configure_visuals(mapped_data, ambiguity_choices):
                 # Store the complete configuration for this visual in session state
                 st.session_state.visual_configs[visual_key] = visual_config_data
 
+
+def generate_and_run_pbi_automation():
+    """Generates config.yaml from session state and runs the PBI Automation script."""
+    if not st.session_state.get('visual_configs'):
+        st.error("No visual configurations found. Please configure visuals first.")
+        return
+
+    try:
+        # --- 1. Build the configuration dictionary ---
+        config = {}
+        report_name = st.session_state.mapped_data.get('report_name', 'Generated Report')
+        
+        config['projectName'] = report_name
+        config['dataset'] = {
+            "connection": {
+                "connectionString": "Data Source=powerbi://api.powerbi.com/v1.0/myorg/EMEA Development;Initial Catalog=\"EU Order to Cash (Ad-hoc)\";Access Mode=readonly;Integrated Security=ClaimsToken",
+                "database": "7f97f9b2-2c89-4359-966b-4612b960fbb1"
+            },
+            "modelName": "EU Order to Cash (Ad-Hoc)"
+        }
+        config['report'] = {
+            'title': FlowDict({"text": report_name}),
+            'data_refresh': FlowDict({"table": "Date Refresh Table", "column": "UPDATED_DATE"})
+        }
+
+        # --- 2. Generate Measures ---
+        generated_measures = []
+        processed_expressions = set()
+        for visual_config in st.session_state.visual_configs.values():
+            for field_type in ['rows', 'columns', 'values']:
+                for item in visual_config.get(field_type, []):
+                    if item.get('type') == 'Measure' and item['pbi_expression'] not in processed_expressions:
+                        measure_name = f"{item['column']} Measure"
+                        dax_expr = item.get('ai_generated_dax', f"SUM({item['pbi_expression']})")
+                        data_type = item.get('ai_data_type', 'decimal number')
+                        
+                        generated_measures.append(FlowDict({
+                            "name": measure_name,
+                            "table": item['table'],
+                            "expression": dax_expr,
+                            "dataType": data_type
+                        }))
+                        processed_expressions.add(item['pbi_expression'])
+        config['report']['measures'] = generated_measures
+
+        # --- 3. Generate Visuals ---
+        visuals = []
+        for visual_config in st.session_state.visual_configs.values():
+            if visual_config['visual_type'] == 'matrix':
+                transformed_filters = []
+                for f in visual_config.get('filters', []):
+                    transformed_filters.append(FlowDict({
+                        "field": FlowDict({
+                            "name": f.get('column'),
+                            "table": f.get('table'),
+                            "type": "column"
+                        }),
+                        "filterType": f.get('filter_type'),
+                        "values": f.get('values')
+                    }))
+                matrix_def = {
+                    "type": "matrix",
+                    "position": FlowDict({"x": 28.8, "y": 100, "width": 1220, "height": 800}),
+                    "rows": [FlowDict({"name": item['column'], "table": item['table'], "type": "Column"}) for item in visual_config.get('rows', []) if item['type'] == 'Column'],
+                    "columns": [FlowDict({"name": item['column'], "table": item['table'], "type": "Column"}) for item in visual_config.get('columns', []) if item['type'] == 'Column'],
+                    "values": [FlowDict({"name": f"{item['column']} Measure", "table": item['table'], "type": "Measure"}) for item in visual_config.get('values', []) if item['type'] == 'Measure'],
+                    "filters": transformed_filters
+                }
+                visuals.append(matrix_def)
+        config['report']['visuals'] = visuals
+
+        # --- 4. Generate YAML string and save to session state ---
+        yaml_string_io = StringIO()
+        yaml.dump(config, yaml_string_io, Dumper=CustomDumper, sort_keys=False, indent=2, allow_unicode=True)
+        generated_yaml_str = yaml_string_io.getvalue()
+        st.session_state['generated_pbi_config'] = generated_yaml_str.strip()
+        st.success("`config.yaml` content generated successfully!")
+
+        # --- 5. Save config locally and run PBI Automation script ---
+        app_dir = Path(__file__).parent
+        local_config_path = app_dir / "config.yaml"
+        with open(local_config_path, 'w', encoding='utf-8') as f:
+            f.write(st.session_state['generated_pbi_config'])
+        st.info(f"Generated `config.yaml` saved to: {local_config_path}")
+
+        pbi_automation_script_path = Path(r"c:\Users\NileshPhapale\Desktop\PBI Automation\main.py")
+        pbi_automation_project_dir = pbi_automation_script_path.parent
+        python_executable = pbi_automation_project_dir / ".venv" / "Scripts" / "python.exe"
+
+        if pbi_automation_script_path.exists():
+            command = [
+                str(python_executable), 
+                str(pbi_automation_script_path),
+                "--config", 
+                str(local_config_path.resolve())
+            ]
+            st.info(f"Executing command: `{' '.join(command)}`")
+            process = subprocess.Popen(
+                command, 
+                cwd=str(pbi_automation_project_dir),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding='utf-8'
+            )
+            stdout, stderr = process.communicate(timeout=300)
+            if process.returncode == 0:
+                st.success("PBI Automation script executed successfully!")
+                if stdout: st.text_area("Script Output:", value=stdout, height=200)
+                if stderr: st.text_area("Script Warnings:", value=stderr, height=100)
+            else:
+                st.error(f"PBI Automation script failed with code {process.returncode}.")
+                if stdout: st.text_area("Script Output:", value=stdout, height=150)
+                if stderr: st.text_area("Script Error Output:", value=stderr, height=150)
+        else:
+            st.warning(f"PBI Automation script not found at: {pbi_automation_script_path}. Skipping execution.")
+
+    except Exception as e:
+        st.error(f"An unexpected error occurred during config generation or script execution: {e}")
+        st.exception(e)
+
 def main():
     """Main function to run the Streamlit application."""
     st.set_page_config(layout="wide")
@@ -372,8 +501,8 @@ def main():
         st.session_state.pbi_mappings = None
     if 'ambiguity_choices' not in st.session_state:
         st.session_state.ambiguity_choices = {}
-    if 'final_config' not in st.session_state:
-        st.session_state.final_config = None
+    if 'visual_configs' not in st.session_state:
+        st.session_state.visual_configs = {}
     if 'measure_ai_dax_results' not in st.session_state:
         st.session_state.measure_ai_dax_results = {}
 
@@ -383,7 +512,6 @@ def main():
         # Reset choices on new analysis
         st.session_state.ambiguity_choices = {}
         st.session_state.visual_configs = {}
-        st.session_state.final_config = None
         if xml_input:
             try:
                 report_data = extract_cognos_report_info(xml_input)
@@ -421,27 +549,23 @@ def main():
                 display_pbi_mappings(st.session_state.pbi_mappings)
                 resolve_ambiguities(st.session_state.pbi_mappings)
 
-                                # If the user changed an ambiguity choice, the old visual config is invalid.
+                # If the user changed an ambiguity choice, the old visual config is invalid.
                 if old_ambiguity_choices != st.session_state.ambiguity_choices:
                     st.session_state.visual_configs = {} # Reset the visual configuration
                     st.rerun() # Rerun to rebuild the UI with a clean state
 
-
+                # This function populates st.session_state.visual_configs on every interaction
                 configure_visuals(st.session_state.mapped_data, st.session_state.ambiguity_choices)
 
-                if st.button("Save Visual Configuration"):
-                    st.session_state.final_config = {
-                        "report_name": st.session_state.mapped_data.get('report_name', 'Generated Report'),
-                        "visuals": list(st.session_state.visual_configs.values())
-                    }
+                # --- RESTRUCTURED UI FLOW ---
 
-
-                # --- AI DAX Generation (using pbi-app.py pattern) ---
+                # --- Step 4: AI DAX Generation (Optional) ---
+                st.markdown("---")
+                st.header("Step 4: Generate DAX (Optional)")
                 if st.button("Generate DAX for Measures"):
                     if not st.session_state.get('visual_configs'):
                         st.warning("Please configure and select items for visuals before generating DAX.")
                     else:
-                        # 1. Collect all unique measures to process
                         tasks_to_process = {}
                         for visual_key, visual_config in st.session_state.visual_configs.items():
                             for field_type in ['rows', 'columns', 'values']:
@@ -459,7 +583,6 @@ def main():
                         if not items_to_process:
                             st.info("No measures selected in any visual to generate DAX for.")
                         else:
-                            # 2. Call AI and cache results
                             ai_results_cache = {}
                             with st.spinner(f"🤖 Generating DAX for {len(items_to_process)} measure(s)..."):
                                 for unique_key, task in items_to_process:
@@ -467,9 +590,6 @@ def main():
                                     ai_results['input_expression'] = task['pbi_expression']
                                     ai_results_cache[unique_key] = ai_results
                             
-
-                            # print(ai_results_cache)  # Debugging output to check AI results
-                            # 3. Update the main visual_configs in session state IN-PLACE
                             config_updated = False
                             for visual_key, visual_config in st.session_state.visual_configs.items():
                                 for field_type in ['rows', 'columns', 'values']:
@@ -484,35 +604,41 @@ def main():
                                                     item['ai_data_type'] = ai_output.get('dataType', 'text')
                                                     config_updated = True
                             
-                            # 4. Update session state for the display section and rerun
                             st.session_state.measure_ai_dax_results = ai_results_cache
-                            st.success(f"✅ AI DAX generation complete. Configuration has been updated.")
-                            # --- FIX: Automatically update the final config for immediate display ---
+                            st.success("✅ AI DAX generation complete. Configuration has been updated.")
                             if config_updated:
-                                st.session_state.final_config = {
-                                    "report_name": st.session_state.mapped_data.get('report_name', 'Generated Report'),
-                                    "visuals": list(st.session_state.visual_configs.values())
-                                }
+                                st.rerun()
                 
-                # --- NEW: Display Generated DAX Section ---
                 if st.session_state.measure_ai_dax_results:
-                    st.markdown("---")
-                    st.header("Generated DAX Measures")
-                    st.info("The following DAX measures have been generated and applied to the configuration above. Review them and click 'Save Visual Configuration' to see the final JSON.")
+                    st.info("The following DAX measures have been generated and applied to the configuration above.")
                     for key, result in st.session_state.measure_ai_dax_results.items():
                         input_expr = result.get('input_expression', 'Unknown Measure')
                         dax_measure = result.get('measure', 'Error: Not generated.')
                         with st.expander(f"DAX for: `{input_expr}`"):
                             st.code(dax_measure, language='dax')
+
+                # --- Step 5: Generate Report ---
+                st.markdown("---")
+                st.header("Step 5: Generate Power BI Report")
+                if st.button("Generate Report", type="primary"):
+                    generate_and_run_pbi_automation()
                 
-                if st.session_state.final_config:
-                    st.markdown("---")
-                    st.header("Final Configuration JSON")
-                    st.json(st.session_state.final_config)
+                if st.session_state.get('generated_pbi_config'):
+                    st.subheader("Generated `config.yaml` Content")
+                    st.code(st.session_state['generated_pbi_config'], language="yaml")
+                    st.download_button(
+                        label="Download config.yaml",
+                        data=st.session_state['generated_pbi_config'],
+                        file_name="config.yaml",
+                        mime="text/yaml"
+                    )
+                
+                # --- (For Debugging) Final Configuration ---
+                st.markdown("---")
+                with st.expander("Show Current Visual Configuration (for debugging)"):
+                    st.json(st.session_state.get('visual_configs', {}))
 
         with tab2:
             st.json(st.session_state.mapped_data)
-
-
 if __name__ == "__main__":
     main()
