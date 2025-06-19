@@ -41,8 +41,14 @@ def main():
 
     if st.button("Analyze and Find All Mappings"):
         # Reset choices on new analysis
+        st.session_state.mapped_data = None
+        st.session_state.pbi_mappings = None
         st.session_state.ambiguity_choices = {}
         st.session_state.visual_configs = {}
+        st.session_state.measure_ai_dax_results = {}
+        st.session_state.generated_pbi_config = None 
+
+
         if xml_input:
             try:
                 report_data = extract_cognos_report_info(xml_input)
@@ -73,81 +79,81 @@ def main():
         tab1, tab2 = st.tabs(["Analysis and Configuration", "Raw JSON"])
         with tab1:
             display_structured_data(st.session_state.mapped_data)
-            if st.session_state.pbi_mappings is not None:
 
-                old_ambiguity_choices = st.session_state.ambiguity_choices.copy()
+        with tab2:
+            st.json(st.session_state.mapped_data)
 
-                display_pbi_mappings(st.session_state.pbi_mappings)
-                resolve_ambiguities(st.session_state.pbi_mappings)
+        
+        if st.session_state.pbi_mappings is not None:
 
-                # If the user changed an ambiguity choice, the old visual config is invalid.
-                if old_ambiguity_choices != st.session_state.ambiguity_choices:
-                    st.session_state.visual_configs = {} # Reset the visual configuration
-                    st.rerun() # Rerun to rebuild the UI with a clean state
-
-                # This function populates st.session_state.visual_configs on every interaction
-                configure_visuals(st.session_state.mapped_data, st.session_state.ambiguity_choices)
-
-                # --- RESTRUCTURED UI FLOW ---
-                if st.button("Save Visual Configuration"):
-                    save_visual_configuration() # This will save the state and rerun the script
-
-                if st.button("Generate DAX for Measures"):
-                    if not st.session_state.get('visual_configs'):
-                        st.warning("Please save a visual configuration before generating DAX.")
+            old_ambiguity_choices = st.session_state.ambiguity_choices.copy()
+            display_pbi_mappings(st.session_state.pbi_mappings)
+            resolve_ambiguities(st.session_state.pbi_mappings)
+            # If the user changed an ambiguity choice, the old visual config is invalid.
+            if old_ambiguity_choices != st.session_state.ambiguity_choices:
+                st.session_state.visual_configs = {} # Reset the visual configuration
+                st.rerun() # Rerun to rebuild the UI with a clean state
+            # This function populates st.session_state.visual_configs on every interaction
+            configure_visuals(st.session_state.mapped_data, st.session_state.ambiguity_choices)
+            # --- RESTRUCTURED UI FLOW ---
+            if st.button("Save Visual Configuration"):
+                save_visual_configuration() # This will save the state and rerun the script
+            if st.button("Generate DAX for Measures"):
+                if not st.session_state.get('visual_configs'):
+                    st.warning("Please save a visual configuration before generating DAX.")
+                else:
+                    tasks_to_process = {}
+                    for visual_key, visual_config in st.session_state.visual_configs.items():
+                        for field_type in ['rows', 'columns', 'values']:
+                            for item in visual_config.get(field_type, []):
+                                if item.get('type').lower() == 'measure' and item.get('pbi_expression') and item.get('aggregation'):
+                                    unique_key = f"{visual_key}_{item['pbi_expression']}"
+                                    if unique_key not in tasks_to_process:
+                                        tasks_to_process[unique_key] = {
+                                            "pbi_expression": item['pbi_expression'],
+                                            "aggregation": item['aggregation']
+                                        }
+                    
+                    items_to_process = list(tasks_to_process.items())
+                    if not items_to_process:
+                        st.info("No measures selected in any visual to generate DAX for.")
                     else:
-                        tasks_to_process = {}
+                        ai_results_cache = {}
+                        with st.spinner(f"🤖 Generating DAX for {len(items_to_process)} measure(s)..."):
+                            for unique_key, task in items_to_process:
+                                ai_results = generate_dax_for_measure(task['pbi_expression'], task['aggregation'])
+                                ai_results['input_expression'] = task['pbi_expression']
+                                ai_results_cache[unique_key] = ai_results
+                        
+                        config_updated = False
                         for visual_key, visual_config in st.session_state.visual_configs.items():
                             for field_type in ['rows', 'columns', 'values']:
                                 for item in visual_config.get(field_type, []):
-                                    if item.get('type').lower() == 'measure' and item.get('pbi_expression') and item.get('aggregation'):
-                                        unique_key = f"{visual_key}_{item['pbi_expression']}"
-                                        if unique_key not in tasks_to_process:
-                                            tasks_to_process[unique_key] = {
-                                                "pbi_expression": item['pbi_expression'],
-                                                "aggregation": item['aggregation']
-                                            }
+                                    if item.get('type').lower() == 'measure':
+                                        lookup_key = f"{visual_key}_{item['pbi_expression']}"
+                                        if lookup_key in ai_results_cache:
+                                            ai_output = ai_results_cache[lookup_key]
+                                            generated_dax = ai_output.get('measure')
+                                            if generated_dax and not generated_dax.startswith("Error"):
+                                                item['ai_generated_dax'] = generated_dax
+                                                item['ai_data_type'] = ai_output.get('dataType', 'text')
+                                                config_updated = True
                         
-                        items_to_process = list(tasks_to_process.items())
+                        st.session_state.measure_ai_dax_results = ai_results_cache
+                        st.success("✅ AI DAX generation complete. Configuration has been updated.")
+                        if config_updated:
+                            st.rerun()
+            
+            if st.session_state.measure_ai_dax_results:
+                st.info("The following DAX measures have been generated and applied to the configuration above.")
+                for key, result in st.session_state.measure_ai_dax_results.items():
+                    input_expr = result.get('input_expression', 'Unknown Measure')
+                    dax_measure = result.get('measure', 'Error: Not generated.')
+                    with st.expander(f"DAX for: `{input_expr}`"):
+                        st.code(dax_measure, language='dax')
+            # --- Step 5: Generate Report ---
 
-                        if not items_to_process:
-                            st.info("No measures selected in any visual to generate DAX for.")
-                        else:
-                            ai_results_cache = {}
-                            with st.spinner(f"🤖 Generating DAX for {len(items_to_process)} measure(s)..."):
-                                for unique_key, task in items_to_process:
-                                    ai_results = generate_dax_for_measure(task['pbi_expression'], task['aggregation'])
-                                    ai_results['input_expression'] = task['pbi_expression']
-                                    ai_results_cache[unique_key] = ai_results
-                            
-                            config_updated = False
-                            for visual_key, visual_config in st.session_state.visual_configs.items():
-                                for field_type in ['rows', 'columns', 'values']:
-                                    for item in visual_config.get(field_type, []):
-                                        if item.get('type').lower() == 'measure':
-                                            lookup_key = f"{visual_key}_{item['pbi_expression']}"
-                                            if lookup_key in ai_results_cache:
-                                                ai_output = ai_results_cache[lookup_key]
-                                                generated_dax = ai_output.get('measure')
-                                                if generated_dax and not generated_dax.startswith("Error"):
-                                                    item['ai_generated_dax'] = generated_dax
-                                                    item['ai_data_type'] = ai_output.get('dataType', 'text')
-                                                    config_updated = True
-                            
-                            st.session_state.measure_ai_dax_results = ai_results_cache
-                            st.success("✅ AI DAX generation complete. Configuration has been updated.")
-                            if config_updated:
-                                st.rerun()
-                
-                if st.session_state.measure_ai_dax_results:
-                    st.info("The following DAX measures have been generated and applied to the configuration above.")
-                    for key, result in st.session_state.measure_ai_dax_results.items():
-                        input_expr = result.get('input_expression', 'Unknown Measure')
-                        dax_measure = result.get('measure', 'Error: Not generated.')
-                        with st.expander(f"DAX for: `{input_expr}`"):
-                            st.code(dax_measure, language='dax')
-
-                # --- Step 5: Generate Report ---
+            if st.session_state.get('visual_configs'):
                 st.markdown("---")
                 st.header("Step 5: Generate Power BI Report")
                 if st.button("Generate Report", type="primary"):
@@ -162,13 +168,10 @@ def main():
                         file_name="config.yaml",
                         mime="text/yaml"
                     )
-                
-                # --- (For Debugging) Final Configuration ---
-                st.markdown("---")
-                with st.expander("Show Current Visual Configuration (for debugging)"):
-                    st.json(st.session_state.get('visual_configs', {}))
-
-        with tab2:
-            st.json(st.session_state.mapped_data)
+            
+            # --- (For Debugging) Final Configuration ---
+            st.markdown("---")
+            with st.expander("Show Current Visual Configuration (for debugging)"):
+                st.json(st.session_state.get('visual_configs', {}))
 if __name__ == "__main__":
     main()
