@@ -181,7 +181,13 @@ def configure_visuals(mapped_data, ambiguity_choices):
                             table, column = parse_pbi_string(pbi_string)
                             if table:
                                 pbi_type = 'Measure' if item.get('type').lower() == 'measure' else 'Column'
-                                detail = {"pbi_expression": f"'{table}'[{column}]","table": table, "column": column, "type": pbi_type}
+                                detail = {
+                                    "seq": item.get('seq', 999), # Add sequence number
+                                    "pbi_expression": f"'{table}'[{column}]",
+                                    "table": table, 
+                                    "column": column, 
+                                    "type": pbi_type
+                                }
                                 if pbi_type == 'Measure':
                                     detail['aggregation'] = item.get('aggregation')
                                 row_options_lookup[pbi_string] = detail
@@ -193,7 +199,13 @@ def configure_visuals(mapped_data, ambiguity_choices):
                             table, column = parse_pbi_string(pbi_string)
                             if table:
                                 pbi_type = 'Measure' if item.get('type').lower() == 'measure' else 'Column'
-                                detail = {"pbi_expression": f"'{table}'[{column}]","table": table, "column": column, "type": pbi_type}
+                                detail = {
+                                    "seq": item.get('seq', 999), # Add sequence number
+                                    "pbi_expression": f"'{table}'[{column}]",
+                                    "table": table, 
+                                    "column": column, 
+                                    "type": pbi_type
+                                }
                                 if pbi_type == 'Measure':
                                     detail['aggregation'] = item.get('aggregation')
                                 col_val_options_lookup[pbi_string] = detail
@@ -205,9 +217,8 @@ def configure_visuals(mapped_data, ambiguity_choices):
                         "original_visual_data": visual
                     }
 
-                    row_options = list(row_options_lookup.keys())
-                    col_val_options = list(col_val_options_lookup.keys())
-                    
+                    row_options = sorted(row_options_lookup.keys(), key=lambda k: row_options_lookup[k].get('seq', 0), reverse=True)
+                    col_val_options = sorted(col_val_options_lookup.keys(), key=lambda k: col_val_options_lookup[k].get('seq', 0), reverse=True)
                     # Get defaults from the *last saved* configuration
                     current_config = st.session_state.visual_configs.get(visual_key, {})
                     
@@ -216,9 +227,15 @@ def configure_visuals(mapped_data, ambiguity_choices):
                             return f"'{item['table']}'[{item['column']}]"
                         return str(item)
 
-                    default_rows = [format_item(item) for item in current_config.get('rows', [])]
-                    default_cols = [format_item(item) for item in current_config.get('columns', [])]
-                    default_vals = [format_item(item) for item in current_config.get('values', [])]
+                    if not current_config:
+                        default_rows = row_options
+                        default_cols = []
+                        default_vals = []
+                    else:
+                        default_rows = [format_item(item) for item in current_config.get('rows', [])]
+                        default_cols = [format_item(item) for item in current_config.get('columns', [])]
+                        default_vals = [format_item(item) for item in current_config.get('values', [])]
+
 
                     st.multiselect("Matrix Rows", options=row_options, default=default_rows, key=f"{visual_key}_rows")
                     st.multiselect("Matrix Columns", options=col_val_options, default=default_cols, key=f"{visual_key}_cols")

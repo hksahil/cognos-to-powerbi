@@ -52,13 +52,28 @@ def extract_cognos_report_info(xml_data):
                 "filters": []
             }
 
+            # Find all descendant nodes within the rows section
+            all_row_nodes = visual.findall('.//d:crosstabRows//*', ns)
+            # Filter for elements that actually define a data item on a row
+            row_defining_elements = [
+                node for node in all_row_nodes 
+                if node.tag in (f'{{{ns["d"]}}}crosstabNodeMember', f'{{{ns["d"]}}}crosstabTotal')
+            ]
             row_items_with_seq = [
                 {'seq': i, 'name': item.get('refDataItem')} 
-                for i, item in enumerate(visual.findall('.//d:crosstabRows//d:crosstabNodeMember', ns))
+                for i, item in enumerate(row_defining_elements)
+            ]
+
+            # Find all descendant nodes within the columns section
+            all_col_nodes = visual.findall('.//d:crosstabColumns//*', ns)
+            # Filter for elements that actually define a data item on a column
+            col_defining_elements = [
+                node for node in all_col_nodes
+                if node.tag in (f'{{{ns["d"]}}}crosstabNodeMember', f'{{{ns["d"]}}}crosstabTotal')
             ]
             col_items_with_seq = [
                 {'seq': i, 'name': item.get('refDataItem')} 
-                for i, item in enumerate(visual.findall('.//d:crosstabColumns//d:crosstabNodeMember', ns))
+                for i, item in enumerate(col_defining_elements)
             ]
             # Remove duplicates while preserving order
             # row_item_names = list(dict.fromkeys(row_item_names_raw))
