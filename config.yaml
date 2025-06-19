@@ -11,6 +11,12 @@ report:
   measures:
   - {name: Shipped_Units Measure, table: Order To Cash (OTC), expression: 'SUM(''Order
       To Cash (OTC)''[Shipped_Units])', dataType: whole number}
+  - {name: Open_Orders_by_Planned_PGI_Date Measure, table: Order To Cash (OTC), expression: 'SUM(''Order
+      To Cash (OTC)''[Open_Orders_by_Planned_PGI_Date])', dataType: whole number}
+  - {name: Payer - AOP_Qty Measure, table: Order To Cash (OTC), expression: 'SUM(''Order
+      To Cash (OTC)''[Payer - AOP_Qty])', dataType: whole number}
+  - {name: Billed_Units Measure, table: Order To Cash (OTC), expression: 'SUM(''Order
+      To Cash (OTC)''[Billed_Units])', dataType: whole number}
   visuals:
   - type: matrix
     position: {x: 28.8, y: 100, width: 1220, height: 800}
@@ -27,10 +33,16 @@ report:
     columns: []
     values:
     - {name: Shipped_Units Measure, table: Order To Cash (OTC), type: Measure}
+    - {name: Open_Orders_by_Planned_PGI_Date Measure, table: Order To Cash (OTC),
+      type: Measure}
+    - {name: Payer - AOP_Qty Measure, table: Order To Cash (OTC), type: Measure}
+    - {name: Billed_Units Measure, table: Order To Cash (OTC), type: Measure}
     filters:
     - {field: {name: Company ID, table: Country, type: column}, filterType: Categorical,
       values: [E211, E320, E667]}
     - {field: {name: Distribution Channel Code, table: Distribution Channel, type: column},
       filterType: Categorical, values: ['01']}
+    - {field: {name: PAK Hierarchy Level 1 Code, table: Product Aggregation Key (PAK),
+        type: column}, filterType: Categorical, values: ['10']}
     - {field: {name: SPU ID, table: SPU, type: column}, filterType: Categorical, values: [
         RE099AAADE, RE099AAAAT, RE099AAACH, REGDHSOTDE, REAHOTHEDE, REWHOLESDE]}
