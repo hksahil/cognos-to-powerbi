@@ -231,7 +231,7 @@ def main():
         # As per your request, load the JSON file first, then update it.
         try:
             # Step 1: Load column_mappings.json
-            with open('column_mappings.json', 'r') as f:
+            with open('../../data/column_mappings.json', 'r') as f:
                 output_json = json.load(f)
         except (FileNotFoundError, json.JSONDecodeError):
             # If file doesn't exist or is invalid, create a new structure
@@ -247,7 +247,7 @@ def main():
 
 
         # Write the updated JSON back to column_mappings.json
-        with open('column_mappings.json', 'w') as f:
+        with open('../../data/column_mappings.json', 'w') as f:
             json.dump(output_json, f, indent=2)
 
             

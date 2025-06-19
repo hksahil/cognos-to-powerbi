@@ -8,11 +8,11 @@ import sqlparse
 import yaml
 
 from src.constants import MAPPING_FILE_PATH, CONNECTION_STRING, DATABASE_NAME
-from src.dax import generate_powerbi_equivalent_formula, generate_dax_from_sql, parse_dax_filter_for_display, \
+from src.sql_pbi.dax import generate_powerbi_equivalent_formula, generate_dax_from_sql, parse_dax_filter_for_display, \
     parse_simple_dax_filter
-from src.lineage import build_visual_candidates, enrich_selected_items
-from src.mapping import load_column_mappings, normalize_column_identifier, find_matching_powerbi_columns
-from src.utils import FlowDict, CustomDumper
+from src.sql_pbi.lineage import build_visual_candidates, enrich_selected_items
+from src.sql_pbi.mapping import load_column_mappings, normalize_column_identifier, find_matching_powerbi_columns
+from src.sql_pbi.utils import FlowDict, CustomDumper
 
 
 def display_sidebar():
@@ -1023,7 +1023,7 @@ def display_pbi_automation_config_section():
         
         # --- PBI Automation script execution logic (Placeholder) ---
         # This assumes your PBI Automation script is in a 'PBI Automation' directory
-        # relative to this script's location, and it's called 'main.py'.
+        # relative to this script's location, and it's called 'sql_analyzer.py'.
         # Adjust the path and command as necessary.
         pbi_automation_script_path = Path(r"C:\Users\NileshPhapale\Desktop\PBI Automation\main.py")
         pbi_automation_project_dir = Path(r"C:\Users\NileshPhapale\Desktop\PBI Automation") # Still needed for cwd

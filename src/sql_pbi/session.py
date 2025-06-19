@@ -1,6 +1,6 @@
 import streamlit as st
 
-from src.mapping import load_column_mappings
+from src.sql_pbi.mapping import load_column_mappings
 
 
 def initialize_session_state():

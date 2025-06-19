@@ -1,8 +1,8 @@
 import streamlit as st
 
-from main import SQLLineageAnalyzer
-from src.dax import generate_powerbi_equivalent_formula
-from src.mapping import find_matching_powerbi_columns, normalize_column_identifier
+from src.utils.sql_analyzer import SQLLineageAnalyzer
+from src.sql_pbi.dax import generate_powerbi_equivalent_formula
+from src.sql_pbi.mapping import find_matching_powerbi_columns, normalize_column_identifier
 
 
 def perform_sql_analysis(sql_query):

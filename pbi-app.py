@@ -1,8 +1,8 @@
 import streamlit as st
 
-from src.lineage import perform_sql_analysis
-from src.session import initialize_session_state
-from src.ui import display_sidebar, display_query_input_area, display_analysis_results_tabs, \
+from src.sql_pbi.lineage import perform_sql_analysis
+from src.sql_pbi.session import initialize_session_state
+from src.sql_pbi.ui import display_sidebar, display_query_input_area, display_analysis_results_tabs, \
     display_visual_configuration_section, display_pbi_automation_config_section, run_ai_dax_for_visual
 
 from dotenv import load_dotenv

@@ -1,11 +1,10 @@
 import streamlit as st
 import google.generativeai as genai
 import re
-import json
 
 from src.constants import API_KEY
-from src.mapping import find_matching_powerbi_columns
-from src.utils import FlowDict
+from src.sql_pbi.mapping import find_matching_powerbi_columns
+from src.sql_pbi.utils import FlowDict
 
 genai.configure(api_key=API_KEY)
 

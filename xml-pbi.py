@@ -1,10 +1,8 @@
 import streamlit as st
-import pandas as pd
-from src.cog_rep import extract_cognos_report_info
+from src.utils.cog_report_parser import extract_cognos_report_info
 from src.xml_pbi.dax import generate_dax_for_measure
 
 from dotenv import load_dotenv
-from pathlib import Path
 
 from src.xml_pbi.utils import load_all_mappings
 from src.xml_pbi.mapping import map_cognos_to_db, find_pbi_mappings
@@ -53,7 +51,7 @@ def main():
                     st.session_state.mapped_data = None
                     st.session_state.pbi_mappings = None
                 else:
-                    all_mappings = load_all_mappings()
+                    all_mappings = load_all_mappings('data/column_mappings.json')
                     if all_mappings:
                         cognos_to_db_map = all_mappings.get("mappings", {}).get("cognos_to_db", {})
                         st.session_state.mapped_data = map_cognos_to_db(report_data, cognos_to_db_map)

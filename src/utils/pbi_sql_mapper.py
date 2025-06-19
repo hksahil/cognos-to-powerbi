@@ -5,7 +5,7 @@ from typing import Dict, List, Any
 from datetime import datetime
 
 # Import the SQLLineageAnalyzer from your existing project
-from main import SQLLineageAnalyzer
+from sql_analyzer import SQLLineageAnalyzer
 
 class PowerBIColumnMapper:
     """Map PowerBI columns to their source database columns."""
@@ -179,8 +179,8 @@ def main():
     
     parser = argparse.ArgumentParser(description="Generate PowerBI column to database column mappings")
     parser.add_argument("input_file", help="Path to JSON file with tables and SQL queries")
-    parser.add_argument("--output-json", "-o", default="dump/column_mappings.json", help="Output JSON file path")
-    parser.add_argument("--output-excel", "-e", default="dump/column_mappings.xlsx", help="Output Excel file path")
+    parser.add_argument("--output-json", "-o", default="../dump/column_mappings.json", help="Output JSON file path")
+    parser.add_argument("--output-excel", "-e", default="../dump/column_mappings.xlsx", help="Output Excel file path")
     parser.add_argument("--dialect", "-d", default="snowflake", help="SQL dialect")
     
     args = parser.parse_args()

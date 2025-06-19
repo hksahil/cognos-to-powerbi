@@ -1,16 +1,20 @@
 import streamlit as st
-import json
 import pandas as pd
 import sqlparse
 import google.generativeai as genai
 import os
 
-# Import the analyzer from main.py
-from main import SQLLineageAnalyzer
+# Import the analyzer from sql_analyzer.py
+from src.utils.sql_analyzer import SQLLineageAnalyzer
+
+
+from dotenv import load_dotenv
+load_dotenv(dotenv_path='.env')
+
+from src.constants import API_KEY
 
 # Set up Gemini API with internal API key
-# For security, best practice is to use environment variables
-API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyAslNL0AT5-dnxtUxUNh9scPP5jnbkfuwE")  # Replace with your actual API key if not using env var
+# For security, best practice is to use environment variables  # Replace with your actual API key if not using env var
 genai.configure(api_key=API_KEY)
 
 def generate_dax_from_sql(sql_expression):
