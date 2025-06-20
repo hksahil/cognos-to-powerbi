@@ -63,7 +63,7 @@ def generate_dax_for_measure(pbi_column_expression, aggregation_type):
         cleaned_response = response.text.strip().replace("```json", "").replace("```", "")
         result = json.loads(cleaned_response)
 
-        print(result)
+        # print(result)
         return result
     except Exception as e:
         print(f"Error generating or parsing DAX from AI: {e}")

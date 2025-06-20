@@ -1,4 +1,5 @@
 import streamlit as st
+
 from src.utils.cog_report_parser import extract_cognos_report_info
 from src.xml_pbi.dax import generate_dax_for_measure
 
@@ -14,7 +15,6 @@ from src.xml_pbi.ui import (
     save_visual_configuration
 )
 from src.xml_pbi.automation import generate_and_run_pbi_automation
-
 
 load_dotenv(dotenv_path='.env')
 

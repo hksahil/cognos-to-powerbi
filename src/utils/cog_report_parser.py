@@ -38,46 +38,70 @@ def extract_cognos_report_info(xml_data):
             "page_name": page.get('name'),
             "visuals": []
         }
+        # Find both crosstabs and lists on the page using an XPath OR operator
+         # --- FIX: Use two separate findall calls as ElementTree does not support the '|' operator ---
+        crosstabs = page.findall('.//d:crosstab', ns)
+        lists = page.findall('.//d:list', ns)
+        visuals = crosstabs + lists # Combine the results into a single list
 
-        # Find crosstabs on the page (can be extended for other visual types like 'list', 'chart')
-        visuals = page.findall('.//d:crosstab', ns)
+        
         for visual in visuals:
             query_ref = visual.get('refQuery')
+            
+            # Determine the visual type from the XML tag
+            visual_tag = visual.tag.replace(f'{{{ns["d"]}}}', '')
+            visual_type = "table" if visual_tag == 'list' else "crosstab"
+
             visual_info = {
                 "visual_name": visual.get('name'),
-                "visual_type": "crosstab",
+                "visual_type": visual_type,
                 "query_ref": query_ref,
                 "rows": [],
                 "columns": [],
                 "filters": []
             }
 
-            # Find all descendant nodes within the rows section
-            all_row_nodes = visual.findall('.//d:crosstabRows//*', ns)
-            # Filter for elements that actually define a data item on a row
-            row_defining_elements = [
-                node for node in all_row_nodes 
-                if node.tag in (f'{{{ns["d"]}}}crosstabNodeMember', f'{{{ns["d"]}}}crosstabTotal')
-            ]
-            row_items_with_seq = [
-                {'seq': i, 'name': item.get('refDataItem')} 
-                for i, item in enumerate(row_defining_elements)
-            ]
+            row_items_with_seq = []
+            col_items_with_seq = []
 
-            # Find all descendant nodes within the columns section
-            all_col_nodes = visual.findall('.//d:crosstabColumns//*', ns)
-            # Filter for elements that actually define a data item on a column
-            col_defining_elements = [
-                node for node in all_col_nodes
-                if node.tag in (f'{{{ns["d"]}}}crosstabNodeMember', f'{{{ns["d"]}}}crosstabTotal')
-            ]
-            col_items_with_seq = [
-                {'seq': i, 'name': item.get('refDataItem')} 
-                for i, item in enumerate(col_defining_elements)
-            ]
-            # Remove duplicates while preserving order
-            # row_item_names = list(dict.fromkeys(row_item_names_raw))
-            # col_item_names = list(dict.fromkeys(col_item_names_raw))
+            # --- Conditional Parsing Logic ---
+            if visual_type == 'crosstab':
+                # Find all descendant nodes within the rows section
+                all_row_nodes = visual.findall('.//d:crosstabRows//*', ns)
+                # Filter for elements that actually define a data item on a row
+                row_defining_elements = [
+                    node for node in all_row_nodes 
+                    if node.tag in (f'{{{ns["d"]}}}crosstabNodeMember', f'{{{ns["d"]}}}crosstabTotal')
+                ]
+                row_items_with_seq = [
+                    {'seq': i, 'name': item.get('refDataItem')} 
+                    for i, item in enumerate(row_defining_elements)
+                ]
+
+                # Find all descendant nodes within the columns section
+                all_col_nodes = visual.findall('.//d:crosstabColumns//*', ns)
+                # Filter for elements that actually define a data item on a column
+                col_defining_elements = [
+                    node for node in all_col_nodes
+                    if node.tag in (f'{{{ns["d"]}}}crosstabNodeMember', f'{{{ns["d"]}}}crosstabTotal')
+                ]
+                col_items_with_seq = [
+                    {'seq': i, 'name': item.get('refDataItem')} 
+                    for i, item in enumerate(col_defining_elements)
+                ]
+            
+            elif visual_type == 'table':
+                # For tables, we only parse columns. The 'rows' list will remain empty.
+                list_columns = visual.findall('.//d:listColumns/d:listColumn', ns)
+                temp_col_items = []
+                for i, col_node in enumerate(list_columns):
+                    # Find the dataItemValue which holds the reference to the query item
+                    data_item_value = col_node.find('.//d:dataItemValue', ns)
+                    if data_item_value is not None:
+                        ref_name = data_item_value.get('refDataItem')
+                        if ref_name:
+                            temp_col_items.append({'seq': i, 'name': ref_name})
+                col_items_with_seq = temp_col_items
 
 
             # Find the associated query to extract expressions and filters
@@ -158,20 +182,42 @@ def extract_cognos_report_info(xml_data):
 
                 # Extract filters
                 visual_info['filters'] = []
-                filter_elements = query.findall('.//d:detailFilter/d:filterExpression', ns)
-                for f_element in filter_elements:
-                    if f_element.text:
-                        full_expression = f_element.text.strip()
-                        
-                        # Regex to find a pattern like [Namespace].[Subject].[Item]
-                        # at the beginning of the filter string.
-                        match = re.match(r"(\s*\[.*?\](?:\.\[.*?\])*)", full_expression)
-                        column_involved = match.group(1).strip() if match else None
+                detail_filters = query.findall('.//d:detailFilter', ns)
 
-                        filter_info = {
-                            "expression": full_expression,
-                            "column": column_involved
-                        }
+                for detail_filter in detail_filters:
+                    filter_info = {}
+                    
+                    # --- NEW: Handle the structured <filterInValues> format ---
+                    in_filter = detail_filter.find('.//d:filterInValues', ns)
+                    if in_filter is not None:
+                        ref_data_item = in_filter.get('refDataItem')
+                        if ref_data_item and ref_data_item in data_item_map:
+                            column_expression = data_item_map[ref_data_item].get('expression')
+                            values = [v.text for v in in_filter.findall('.//d:filterValue', ns) if v.text]
+                            
+                            if column_expression and values:
+                                # Reconstruct the expression string for consistency
+                                values_str = "', '".join(values)
+                                full_expression = f"{column_expression} in ('{values_str}')"
+                                
+                                filter_info = {
+                                    "expression": full_expression,
+                                    "column": column_expression
+                                }
+
+                    # --- FALLBACK: Handle the raw <filterExpression> format ---
+                    else:
+                        f_element = detail_filter.find('.//d:filterExpression', ns)
+                        if f_element is not None and f_element.text:
+                            full_expression = f_element.text.strip()
+                            match = re.match(r"(\s*\[.*?\](?:\.\[.*?\])*)", full_expression)
+                            column_involved = match.group(1).strip() if match else None
+                            filter_info = {
+                                "expression": full_expression,
+                                "column": column_involved
+                            }
+
+                    if filter_info:
                         visual_info['filters'].append(filter_info)
 
             page_info['visuals'].append(visual_info)
@@ -181,7 +227,7 @@ def extract_cognos_report_info(xml_data):
 
 if __name__ == "__main__":
     # Use the path to your report.xml file
-    report_xml_path = r'../../data/report.xml'
+    report_xml_path = r'../../data/table_rep.xml'
     
     xml_content = None
     if not os.path.exists(report_xml_path):
