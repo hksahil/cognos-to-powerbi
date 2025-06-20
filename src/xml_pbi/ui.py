@@ -21,6 +21,9 @@ def display_structured_data(data):
                 for item in visual.get('columns', []):
                     item['role'] = 'Column'
                     all_fields.append(item)
+                for item in visual.get('values', []):
+                    item['role'] = 'Value'
+                    all_fields.append(item)
                 for f in visual.get('filters', []):
                     filter_field = {
                         'role': 'Filter', 'name': f.get('column', 'N/A'), 'type': None,
@@ -152,9 +155,10 @@ def save_visual_configuration():
             # Rebuild the full detail objects from the selected keys
             visual_config_data["columns"] = [field_lookup.get(key) for key in selected_keys if key in field_lookup]
         # Re-process filters
+
         resolved_filters = []
         for f in lookups['original_visual_data'].get('filters', []):
-            cognos_expr = f.get('expression') # FIX: Use the cognos expression as the key
+            cognos_expr = f.get('column') 
             if cognos_expr and cognos_expr in st.session_state.ambiguity_choices:
                 pbi_string = st.session_state.ambiguity_choices[cognos_expr]
                 if pbi_string:
@@ -215,7 +219,7 @@ def configure_visuals(mapped_data, ambiguity_choices):
                                         detail['aggregation'] = item.get('aggregation')
                                     resolved_row_fields.append(detail)
 
-                    resolved_col_val_fields = []
+                    resolved_col_fields = []
                     for item in visual.get('columns', []):
                         cognos_expr = item.get('expression')
                         if cognos_expr and cognos_expr in ambiguity_choices:
@@ -231,19 +235,41 @@ def configure_visuals(mapped_data, ambiguity_choices):
                                     }
                                     if pbi_type == 'Measure':
                                         detail['aggregation'] = item.get('aggregation')
-                                    resolved_col_val_fields.append(detail)
+                                    resolved_col_fields.append(detail)
+
+                    resolved_val_fields = []
+                    for item in visual.get('values', []):
+                        cognos_expr = item.get('expression')
+                        if cognos_expr and cognos_expr in ambiguity_choices:
+                            pbi_string = ambiguity_choices[cognos_expr]
+                            if pbi_string:
+                                table, column = parse_pbi_string(pbi_string)
+                                if table:
+                                    pbi_type = 'Measure' if item.get('type').lower() == 'measure' else 'Column'
+                                    detail = {
+                                        "cognos_expression": cognos_expr, "seq": item.get('seq', 999),
+                                        "pbi_expression": f"'{table}'[{column}]", "table": table, 
+                                        "column": column, "type": pbi_type
+                                    }
+                                    if pbi_type == 'Measure':
+                                        detail['aggregation'] = item.get('aggregation')
+                                    resolved_val_fields.append(detail)
 
                     # Sort fields based on original Cognos sequence number
                     resolved_row_fields.sort(key=lambda x: x.get('seq', 999), reverse=True)
-                    resolved_col_val_fields.sort(key=lambda x: x.get('seq', 999), reverse=True)
+                    resolved_col_fields.sort(key=lambda x: x.get('seq', 999), reverse=True)
+                    resolved_val_fields.sort(key=lambda x: x.get('seq', 999))
+
 
                     # 2. Create a single lookup from cognos_expression to the detail object
-                    all_fields = resolved_row_fields + resolved_col_val_fields
+                    all_fields = resolved_row_fields + resolved_col_fields + resolved_val_fields
                     field_lookup = {field['cognos_expression']: field for field in all_fields}
 
                     # 3. The `options` for the multiselects are the unique cognos_expressions
                     row_options_keys = [field['cognos_expression'] for field in resolved_row_fields]
-                    col_val_options_keys = [field['cognos_expression'] for field in resolved_col_val_fields]
+                    col_options_keys = [field['cognos_expression'] for field in resolved_col_fields]
+                    val_options_keys = [field['cognos_expression'] for field in resolved_col_fields + resolved_val_fields]
+
 
                     # 4. The format function displays the PBI string to the user
                     def format_multiselect_option(cognos_expr_key):
@@ -265,7 +291,7 @@ def configure_visuals(mapped_data, ambiguity_choices):
                         saved_val_exprs = [item.get('cognos_expression') for item in current_config.get('values', []) if item.get('cognos_expression')]
                         
                         all_saved_exprs = saved_row_exprs + saved_col_exprs + saved_val_exprs
-                        all_option_keys = row_options_keys + col_val_options_keys
+                        all_option_keys = row_options_keys + col_options_keys + val_options_keys
                         
                         is_config_valid = all(expr in all_option_keys for expr in all_saved_exprs)
 
@@ -274,15 +300,15 @@ def configure_visuals(mapped_data, ambiguity_choices):
                         default_col_keys = [item['cognos_expression'] for item in current_config.get('columns', [])]
                         default_val_keys = [item['cognos_expression'] for item in current_config.get('values', [])]
                     else:
-                        # Default to all available rows, and no columns/values
+                        # Default to original Cognos roles
                         default_row_keys = row_options_keys
-                        default_col_keys = []
-                        default_val_keys = []
+                        default_col_keys = col_options_keys
+                        default_val_keys = [field['cognos_expression'] for field in resolved_val_fields]
 
                     # 6. Create the multiselect widgets
                     st.multiselect("Matrix Rows", options=row_options_keys, default=default_row_keys, format_func=format_multiselect_option, key=f"{visual_key}_rows")
-                    st.multiselect("Matrix Columns", options=col_val_options_keys, default=default_col_keys, format_func=format_multiselect_option, key=f"{visual_key}_cols")
-                    st.multiselect("Matrix Values", options=col_val_options_keys, default=default_val_keys, format_func=format_multiselect_option, key=f"{visual_key}_vals")
+                    st.multiselect("Matrix Columns", options=col_options_keys, default=default_col_keys, format_func=format_multiselect_option, key=f"{visual_key}_cols")
+                    st.multiselect("Matrix Values", options=val_options_keys, default=default_val_keys, format_func=format_multiselect_option, key=f"{visual_key}_vals")
 
 
                 elif visual.get('visual_type') == 'table':

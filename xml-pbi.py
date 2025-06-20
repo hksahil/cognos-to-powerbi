@@ -40,6 +40,9 @@ def main():
     xml_input = st.text_area("Paste XML content here", height=300, placeholder="<report>...</report>")
 
     if st.button("Analyze and Find All Mappings"):
+
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
         # Reset choices on new analysis
         st.session_state.mapped_data = None
         st.session_state.pbi_mappings = None
@@ -91,7 +94,7 @@ def main():
             # The 'resolve_ambiguities' function now handles all display and resolution logic.
             resolve_ambiguities(st.session_state.pbi_mappings)
 
-            
+
             if old_ambiguity_choices != st.session_state.ambiguity_choices:
                 st.session_state.visual_configs = {} # Reset the visual configuration
                 st.rerun() # Rerun to rebuild the UI with a clean state

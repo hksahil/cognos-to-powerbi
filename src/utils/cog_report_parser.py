@@ -58,11 +58,13 @@ def extract_cognos_report_info(xml_data):
                 "query_ref": query_ref,
                 "rows": [],
                 "columns": [],
+                "values": [],
                 "filters": []
             }
 
             row_items_with_seq = []
             col_items_with_seq = []
+            value_items_with_seq = []
 
             # --- Conditional Parsing Logic ---
             if visual_type == 'crosstab':
@@ -89,7 +91,14 @@ def extract_cognos_report_info(xml_data):
                     {'seq': i, 'name': item.get('refDataItem')} 
                     for i, item in enumerate(col_defining_elements)
                 ]
-            
+
+                default_measure = visual.find('d:defaultMeasure', ns)
+                if default_measure is not None:
+                    ref_name = default_measure.get('refDataItem')
+                    if ref_name:
+                        value_items_with_seq.append({'seq': 0, 'name': ref_name})
+
+                        
             elif visual_type == 'table':
                 # For tables, we only parse columns. The 'rows' list will remain empty.
                 list_columns = visual.findall('.//d:listColumns/d:listColumn', ns)
@@ -158,6 +167,20 @@ def extract_cognos_report_info(xml_data):
                         col_info['aggregation'] = item_details.get('aggregation')
                     temp_cols.append(col_info)
 
+                temp_values = []
+                for item_data in value_items_with_seq:
+                    name = item_data['name']
+                    item_details = data_item_map.get(name, {})
+                    value_info = {
+                        "seq": item_data['seq'],
+                        "name": name,
+                        "expression": item_details.get("expression"),
+                        "type": item_details.get("type")
+                    }
+                    if item_details.get('type') == 'measure':
+                        value_info['aggregation'] = item_details.get('aggregation')
+                    temp_values.append(value_info)
+
                 # --- NEW: Manually filter duplicates based on (name, expression) to preserve order ---
                 seen_rows = set()
                 unique_rows = []
@@ -178,6 +201,7 @@ def extract_cognos_report_info(xml_data):
                         seen_cols.add(unique_key)
                         unique_cols.append(col)
                 visual_info['columns'] = unique_cols
+                visual_info['values'] = temp_values
 
 
                 # Extract filters
@@ -227,7 +251,7 @@ def extract_cognos_report_info(xml_data):
 
 if __name__ == "__main__":
     # Use the path to your report.xml file
-    report_xml_path = r'../../data/table_rep.xml'
+    report_xml_path = r'../../data/matrix_val.xml'
     
     xml_content = None
     if not os.path.exists(report_xml_path):

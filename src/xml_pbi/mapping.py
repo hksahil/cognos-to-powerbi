@@ -25,7 +25,7 @@ def map_cognos_to_db(report_data, cognos_db_map):
 
     for page in report_data.get('pages', []):
         for visual in page.get('visuals', []):
-            for column_type in ['rows', 'columns']:
+            for column_type in ['rows', 'columns', 'values']:
                 for item in visual.get(column_type, []):
                     lookup_key = create_lookup_key(item.get('expression'))
                     item['db_mapping'] = cognos_db_map.get(lookup_key, 'N/A')
@@ -46,7 +46,11 @@ def find_pbi_mappings(mapped_data, db_to_pbi_map):
 
     for page in mapped_data.get('pages', []):
         for visual in page.get('visuals', []):
-            all_items = visual.get('rows', []) + visual.get('columns', [])
+            all_items = (
+                visual.get('rows', []) + 
+                visual.get('columns', []) + 
+                visual.get('values', [])
+            )
             all_filters = visual.get('filters', [])
 
             for item in all_items:
