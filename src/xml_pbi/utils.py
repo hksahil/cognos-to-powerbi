@@ -33,10 +33,16 @@ def load_all_mappings(filepath="column_mappings.json"):
 
 
 def parse_pbi_string(pbi_string):
-    """Helper to parse 'Table'[Column] into a tuple."""
-    match = re.match(r"'(.*?)'\[(.*?)\]", pbi_string)
+    """Parses a Power BI string like ''Table'[Column]' into its components."""
+    if not pbi_string:
+        return None, None
+    # Use strip() to handle potential leading/trailing whitespace
+    match = re.match(r"'(.*?)'\[(.*?)\]", pbi_string.strip())
     if match:
-        return match.groups()
+        # Strip whitespace from captured groups as well
+        table = match.group(1).strip()
+        column = match.group(2).strip()
+        return table, column
     return None, None
 
 def parse_filter_expression(expression):

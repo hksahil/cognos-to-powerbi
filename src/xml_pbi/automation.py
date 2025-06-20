@@ -54,7 +54,7 @@ def generate_and_run_pbi_automation():
         # --- 3. Generate Visuals ---
         visuals = []
         for visual_config in st.session_state.visual_configs.values():
-            if visual_config['visual_type'] == 'matrix':
+            if visual_config['visual_type'] == 'crosstab':
                 transformed_filters = []
                 for f in visual_config.get('filters', []):
                     transformed_filters.append(FlowDict({
@@ -75,6 +75,36 @@ def generate_and_run_pbi_automation():
                     "filters": transformed_filters
                 }
                 visuals.append(matrix_def)
+            elif visual_config['visual_type'] == 'table':
+                sorted_cols = sorted(visual_config.get('columns', []), key=lambda i: i.get('seq', 0))
+                transformed_filters = []
+                for f in visual_config.get('filters', []):
+                    transformed_filters.append(FlowDict({
+                        "field": FlowDict({
+                            "name": f.get('column'),
+                            "table": f.get('table'),
+                            "type": "column"
+                        }),
+                        "filterType": f.get('filter_type'),
+                        "values": f.get('values')
+                    }))               
+                table_columns = []
+                for item in sorted_cols:
+                    item_type = item.get('type', 'Column')
+                    name = f"{item['column']} Measure" if item_type == 'Measure' else item['column']
+                    table_columns.append(FlowDict({
+                        "name": name,
+                        "table": item['table'],
+                        "type": item_type
+                    }))
+    
+                table_def = {
+                    "type": "table",
+                    "position": FlowDict({"x": 28.8, "y": 100, "width": 1220, "height": 800}),
+                    "fields": table_columns,
+                    "filters": transformed_filters
+                }
+                visuals.append(table_def)
         config['report']['visuals'] = visuals
 
         # --- 4. Generate YAML string and save to session state ---

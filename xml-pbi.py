@@ -87,9 +87,11 @@ def main():
         if st.session_state.pbi_mappings is not None:
 
             old_ambiguity_choices = st.session_state.ambiguity_choices.copy()
-            display_pbi_mappings(st.session_state.pbi_mappings)
+            # The 'display_pbi_mappings' function is no longer needed and has been removed.
+            # The 'resolve_ambiguities' function now handles all display and resolution logic.
             resolve_ambiguities(st.session_state.pbi_mappings)
-            # If the user changed an ambiguity choice, the old visual config is invalid.
+
+            
             if old_ambiguity_choices != st.session_state.ambiguity_choices:
                 st.session_state.visual_configs = {} # Reset the visual configuration
                 st.rerun() # Rerun to rebuild the UI with a clean state

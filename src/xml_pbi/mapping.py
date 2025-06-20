@@ -36,42 +36,45 @@ def map_cognos_to_db(report_data, cognos_db_map):
 
     return report_data
 
+
 def find_pbi_mappings(mapped_data, db_to_pbi_map):
-    """Finds Power BI mappings for all unique DB columns and their associated Cognos display items."""
+    """Finds Power BI mappings for all unique Cognos expressions."""
     if not db_to_pbi_map:
-        return [] # Return an empty list
+        return []
 
-    db_column_details = {}
+    cognos_expression_details = {}
 
-    # Collect all unique DB columns and their associated Cognos display items
     for page in mapped_data.get('pages', []):
         for visual in page.get('visuals', []):
-            # Process rows and columns: use the full expression as the display item
-            for item in visual.get('rows', []) + visual.get('columns', []):
+            all_items = visual.get('rows', []) + visual.get('columns', [])
+            all_filters = visual.get('filters', [])
+
+            for item in all_items:
+                cognos_expr = item.get('expression')
                 db_map = item.get('db_mapping')
-                expression = item.get('expression')
-                if db_map and db_map != 'N/A' and expression:
-                    if db_map not in db_column_details:
-                        db_column_details[db_map] = {'display_items': set()}
-                    db_column_details[db_map]['display_items'].add(expression)
-            
-            # Process filters: use the column name as the display item
-            for f in visual.get('filters', []):
+                if cognos_expr and db_map and db_map != 'N/A':
+                    if cognos_expr not in cognos_expression_details:
+                        cognos_expression_details[cognos_expr] = {
+                            "db_column": db_map,
+                            "pbi_mappings": db_to_pbi_map.get(db_map, [])
+                        }
+
+            for f in all_filters:
+                cognos_expr = f.get('column')
                 db_map = f.get('db_mapping')
-                column_name = f.get('column')
-                if db_map and db_map != 'N/A' and column_name:
-                    if db_map not in db_column_details:
-                        db_column_details[db_map] = {'display_items': set()}
-                    db_column_details[db_map]['display_items'].add(column_name)
-    
-    # Build the final result structure with the 'display_items' key
-    pbi_mappings_result = []
-    for db_col, details in sorted(db_column_details.items()):
-        pbi_maps = db_to_pbi_map.get(db_col, [])
-        pbi_mappings_result.append({
-            "db_column": db_col,
-            "display_items": sorted(list(details['display_items'])),
-            "pbi_mappings": pbi_maps
+                if cognos_expr and db_map and db_map != 'N/A':
+                    if cognos_expr not in cognos_expression_details:
+                        cognos_expression_details[cognos_expr] = {
+                            "db_column": db_map,
+                            "pbi_mappings": db_to_pbi_map.get(db_map, [])
+                        }
+
+    result = []
+    for cognos_expr, details in sorted(cognos_expression_details.items()):
+        result.append({
+            "cognos_expression": cognos_expr,
+            "db_column": details["db_column"],
+            "pbi_mappings": details["pbi_mappings"]
         })
-            
-    return pbi_mappings_result
+    
+    return result

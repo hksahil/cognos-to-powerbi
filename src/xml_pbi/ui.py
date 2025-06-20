@@ -58,50 +58,59 @@ def display_pbi_mappings(pbi_data):
                 st.markdown("_No corresponding Power BI mapping found._")
 
 def resolve_ambiguities(pbi_data):
-    """Creates a UI section for resolving ambiguous mappings and populates all resolved choices."""
-    ambiguous_items = [
-        group for group in pbi_data
-        if group.get('pbi_mappings') and len(group.get('pbi_mappings')) > 1
-    ]
-    non_ambiguous_items = [
-        group for group in pbi_data
-        if group.get('pbi_mappings') and len(group.get('pbi_mappings')) == 1
-    ]
-
-    # Automatically set choices for non-ambiguous items first. This is the crucial fix.
-    for mapping_group in non_ambiguous_items:
-        db_column = mapping_group['db_column']
-        pbi_map = mapping_group['pbi_mappings'][0]
-        st.session_state.ambiguity_choices[db_column] = f"'{pbi_map.get('table')}'[{pbi_map.get('column')}]"
-
-    st.markdown("---")
-    st.header("Step 3: Resolve Ambiguities")
-
-    if not ambiguous_items:
-        st.success("✅ No mapping ambiguities to resolve.")
+    """Creates a UI for resolving ambiguous DB to Power BI mappings for each Cognos item."""
+    if not pbi_data:
         return
 
-    st.info("The following database columns have multiple Power BI mappings. Please select the correct one for each.")
-    
-    for mapping_group in ambiguous_items:
-        db_column = mapping_group['db_column']
-        # Consistently use the 'display_items' key
-        display_items = mapping_group.get('display_items', [])
-        pbi_maps = mapping_group.get('pbi_mappings', [])
-        options = [f"'{pbi_map.get('table')}'[{pbi_map.get('column')}]" for pbi_map in pbi_maps]
-        
-        display_items_str = ", ".join(f"`{item}`" for item in display_items)
-        st.markdown(f"#### Resolve for Cognos Items: {display_items_str}")
-        st.caption(f"(Database Column: `{db_column}`)")
-        
-        current_choice = st.session_state.ambiguity_choices.get(db_column, options[0])
-        chosen = st.radio(
-            label="Select the correct Power BI column:",
-            options=options,
-            index=options.index(current_choice) if current_choice in options else 0,
-            key=f"radio_resolve_{db_column}"
-        )
-        st.session_state.ambiguity_choices[db_column] = chosen
+    # This will hold the final choices
+    choices = {}
+    ambiguous_mappings_found = False
+
+    def format_pbi_map(item):
+        """Formats a PBI mapping object into a user-friendly string."""
+        if isinstance(item, str):
+            return item # Already in the correct format
+        if isinstance(item, dict):
+            # Use .strip() to handle potential whitespace issues in the mapping file
+            table = item.get('table', '').strip()
+            column = item.get('column', '').strip()
+            return f"'{table}'[{column}]"
+        return str(item) # Fallback for other types
+
+    for mapping in pbi_data:
+        cognos_expr = mapping['cognos_expression']
+        db_col = mapping['db_column']
+        pbi_maps = mapping['pbi_mappings']
+
+        if not pbi_maps:
+            choices[cognos_expr] = None
+        elif len(pbi_maps) == 1:
+            # Automatically resolved, store the string format
+            choices[cognos_expr] = format_pbi_map(pbi_maps[0])
+        else:
+            # Ambiguous mapping, requires user input
+            ambiguous_mappings_found = True
+            with st.container(border=True):
+                st.markdown(f"**Resolve for Cognos Item:** `{cognos_expr}`")
+                st.markdown(f"*(Database Column: `{db_col}`)*")
+                
+                # The `options` are dictionaries, so we use `format_func` to display them nicely.
+                choice_obj = st.radio(
+                    "Select the correct Power BI column:",
+                    options=pbi_maps,
+                    format_func=format_pbi_map,
+                    key=cognos_expr
+                )
+                # Store the formatted string representation, not the dictionary, for consistency.
+                choices[cognos_expr] = format_pbi_map(choice_obj)
+
+    if ambiguous_mappings_found:
+        st.info("Review the selections above for any ambiguous mappings.")
+    else:
+        st.success("✅ All mappings were resolved automatically.")
+
+    # Update session state with the new choices
+    st.session_state.ambiguity_choices = choices
 
 def save_visual_configuration():
     """Reads the current state of the UI widgets and saves it to st.session_state.visual_configs."""
@@ -111,37 +120,52 @@ def save_visual_configuration():
 
     new_configs = {}
     for visual_key, lookups in st.session_state.temp_visual_lookups.items():
+        original_visual = lookups['original_visual_data']
+        visual_type = original_visual.get('visual_type')
+
         visual_config_data = {
-            "visual_name": lookups['original_visual_data'].get('visual_name'),
-            "visual_type": 'matrix'
+            "visual_name": original_visual.get('visual_name'),
+            "visual_type": visual_type,
+            "rows": [],
+            "columns": [],
+            "values": []
         }
 
-        # Get selections from multiselects
-        selected_rows_str = st.session_state.get(f"{visual_key}_rows", [])
-        selected_cols_str = st.session_state.get(f"{visual_key}_cols", [])
-        selected_vals_str = st.session_state.get(f"{visual_key}_vals", [])
+        if visual_type == 'crosstab':
+            # Get selected cognos_expression keys from multiselects
+            selected_row_keys = st.session_state.get(f"{visual_key}_rows", [])
+            selected_col_keys = st.session_state.get(f"{visual_key}_cols", [])
+            selected_val_keys = st.session_state.get(f"{visual_key}_vals", [])
 
-        all_options_lookup = {**lookups['row_options_lookup'], **lookups['col_val_options_lookup']}
+            field_lookup = lookups.get('field_lookup', {})
 
-        # Rebuild objects from selections
-        visual_config_data["rows"] = [all_options_lookup.get(s) for s in selected_rows_str if s in all_options_lookup]
-        visual_config_data["columns"] = [all_options_lookup.get(s) for s in selected_cols_str if s in all_options_lookup]
-        visual_config_data["values"] = [all_options_lookup.get(s) for s in selected_vals_str if s in all_options_lookup]
-
+            # Rebuild full detail objects from the selected keys
+            visual_config_data["rows"] = [field_lookup.get(key) for key in selected_row_keys if key in field_lookup]
+            visual_config_data["columns"] = [field_lookup.get(key) for key in selected_col_keys if key in field_lookup]
+            visual_config_data["values"] = [field_lookup.get(key) for key in selected_val_keys if key in field_lookup]
+        
+        elif visual_type == 'table':
+            # FIX: Use the new 'field_lookup' structure for tables
+            # We get back a list of selected cognos_expressions (keys)
+            selected_keys = st.session_state.get(f"{visual_key}_table_cols", [])
+            field_lookup = lookups.get('field_lookup', {})
+            # Rebuild the full detail objects from the selected keys
+            visual_config_data["columns"] = [field_lookup.get(key) for key in selected_keys if key in field_lookup]
         # Re-process filters
         resolved_filters = []
         for f in lookups['original_visual_data'].get('filters', []):
-            db_map = f.get('db_mapping')
-            if db_map and db_map in st.session_state.ambiguity_choices:
-                pbi_string = st.session_state.ambiguity_choices[db_map]
-                table, column = parse_pbi_string(pbi_string)
-                if table:
-                    filter_values = parse_filter_expression(f.get('expression'))
-                    if filter_values:
-                        resolved_filters.append({
-                            "pbi_expression": f"'{table}'[{column}]", "table": table, "column": column,
-                            "type": "Column", "filter_type": "Categorical", "values": filter_values
-                        })
+            cognos_expr = f.get('expression') # FIX: Use the cognos expression as the key
+            if cognos_expr and cognos_expr in st.session_state.ambiguity_choices:
+                pbi_string = st.session_state.ambiguity_choices[cognos_expr]
+                if pbi_string:
+                    table, column = parse_pbi_string(pbi_string)
+                    if table:
+                        filter_values = parse_filter_expression(f.get('expression'))
+                        if filter_values:
+                            resolved_filters.append({
+                                "pbi_expression": f"'{table}'[{column}]", "table": table, "column": column,
+                                "type": "Column", "filter_type": "Categorical", "values": filter_values
+                            })
         visual_config_data['filters'] = resolved_filters
         
         new_configs[visual_key] = visual_config_data
@@ -169,77 +193,164 @@ def configure_visuals(mapped_data, ambiguity_choices):
             with st.container(border=True):
                 st.markdown(f"**Visual:** `{visual.get('visual_name', 'Unnamed Visual')}`")
 
-                if visual.get('visual_type') == 'crosstab':
-                    # --- Prepare detailed options and string-based lookups for UI ---
-                    row_options_lookup = {}
-                    col_val_options_lookup = {}
 
+                if visual.get('visual_type') == 'crosstab':
+                    # --- REFACTORED LOGIC FOR MATRIX ---
+                    # 1. Create lists of resolved field objects for rows and columns/values
+                    resolved_row_fields = []
                     for item in visual.get('rows', []):
-                        db_map = item.get('db_mapping')
-                        if db_map and db_map in ambiguity_choices:
-                            pbi_string = ambiguity_choices[db_map]
-                            table, column = parse_pbi_string(pbi_string)
-                            if table:
-                                pbi_type = 'Measure' if item.get('type').lower() == 'measure' else 'Column'
-                                detail = {
-                                    "seq": item.get('seq', 999), # Add sequence number
-                                    "pbi_expression": f"'{table}'[{column}]",
-                                    "table": table, 
-                                    "column": column, 
-                                    "type": pbi_type
-                                }
-                                if pbi_type == 'Measure':
-                                    detail['aggregation'] = item.get('aggregation')
-                                row_options_lookup[pbi_string] = detail
-                    
+                        cognos_expr = item.get('expression')
+                        if cognos_expr and cognos_expr in ambiguity_choices:
+                            pbi_string = ambiguity_choices[cognos_expr]
+                            if pbi_string:
+                                table, column = parse_pbi_string(pbi_string)
+                                if table:
+                                    pbi_type = 'Measure' if item.get('type').lower() == 'measure' else 'Column'
+                                    detail = {
+                                        "cognos_expression": cognos_expr, "seq": item.get('seq', 999),
+                                        "pbi_expression": f"'{table}'[{column}]", "table": table, 
+                                        "column": column, "type": pbi_type
+                                    }
+                                    if pbi_type == 'Measure':
+                                        detail['aggregation'] = item.get('aggregation')
+                                    resolved_row_fields.append(detail)
+
+                    resolved_col_val_fields = []
                     for item in visual.get('columns', []):
-                        db_map = item.get('db_mapping')
-                        if db_map and db_map in ambiguity_choices:
-                            pbi_string = ambiguity_choices[db_map]
-                            table, column = parse_pbi_string(pbi_string)
-                            if table:
-                                pbi_type = 'Measure' if item.get('type').lower() == 'measure' else 'Column'
-                                detail = {
-                                    "seq": item.get('seq', 999), # Add sequence number
-                                    "pbi_expression": f"'{table}'[{column}]",
-                                    "table": table, 
-                                    "column": column, 
-                                    "type": pbi_type
-                                }
-                                if pbi_type == 'Measure':
-                                    detail['aggregation'] = item.get('aggregation')
-                                col_val_options_lookup[pbi_string] = detail
-                    
-                    # Save lookups for the save button to use later
+                        cognos_expr = item.get('expression')
+                        if cognos_expr and cognos_expr in ambiguity_choices:
+                            pbi_string = ambiguity_choices[cognos_expr]
+                            if pbi_string:
+                                table, column = parse_pbi_string(pbi_string)
+                                if table:
+                                    pbi_type = 'Measure' if item.get('type').lower() == 'measure' else 'Column'
+                                    detail = {
+                                        "cognos_expression": cognos_expr, "seq": item.get('seq', 999),
+                                        "pbi_expression": f"'{table}'[{column}]", "table": table, 
+                                        "column": column, "type": pbi_type
+                                    }
+                                    if pbi_type == 'Measure':
+                                        detail['aggregation'] = item.get('aggregation')
+                                    resolved_col_val_fields.append(detail)
+
+                    # Sort fields based on original Cognos sequence number
+                    resolved_row_fields.sort(key=lambda x: x.get('seq', 999), reverse=True)
+                    resolved_col_val_fields.sort(key=lambda x: x.get('seq', 999), reverse=True)
+
+                    # 2. Create a single lookup from cognos_expression to the detail object
+                    all_fields = resolved_row_fields + resolved_col_val_fields
+                    field_lookup = {field['cognos_expression']: field for field in all_fields}
+
+                    # 3. The `options` for the multiselects are the unique cognos_expressions
+                    row_options_keys = [field['cognos_expression'] for field in resolved_row_fields]
+                    col_val_options_keys = [field['cognos_expression'] for field in resolved_col_val_fields]
+
+                    # 4. The format function displays the PBI string to the user
+                    def format_multiselect_option(cognos_expr_key):
+                        return field_lookup.get(cognos_expr_key, {}).get('pbi_expression', 'Unknown')
+
+                    # Save the new lookup for the save function to use
                     st.session_state.temp_visual_lookups[visual_key] = {
-                        "row_options_lookup": row_options_lookup,
-                        "col_val_options_lookup": col_val_options_lookup,
+                        "field_lookup": field_lookup,
                         "original_visual_data": visual
                     }
 
-                    row_options = sorted(row_options_lookup.keys(), key=lambda k: row_options_lookup[k].get('seq', 0), reverse=True)
-                    col_val_options = sorted(col_val_options_lookup.keys(), key=lambda k: col_val_options_lookup[k].get('seq', 0), reverse=True)
-                    # Get defaults from the *last saved* configuration
+                    # 5. Determine default selections
                     current_config = st.session_state.visual_configs.get(visual_key, {})
                     
-                    def format_item(item):
-                        if isinstance(item, dict):
-                            return f"'{item['table']}'[{item['column']}]"
-                        return str(item)
+                    is_config_valid = False
+                    if current_config:
+                        saved_row_exprs = [item.get('cognos_expression') for item in current_config.get('rows', []) if item.get('cognos_expression')]
+                        saved_col_exprs = [item.get('cognos_expression') for item in current_config.get('columns', []) if item.get('cognos_expression')]
+                        saved_val_exprs = [item.get('cognos_expression') for item in current_config.get('values', []) if item.get('cognos_expression')]
+                        
+                        all_saved_exprs = saved_row_exprs + saved_col_exprs + saved_val_exprs
+                        all_option_keys = row_options_keys + col_val_options_keys
+                        
+                        is_config_valid = all(expr in all_option_keys for expr in all_saved_exprs)
 
-                    if not current_config:
-                        default_rows = row_options
-                        default_cols = []
-                        default_vals = []
+                    if is_config_valid:
+                        default_row_keys = [item['cognos_expression'] for item in current_config.get('rows', [])]
+                        default_col_keys = [item['cognos_expression'] for item in current_config.get('columns', [])]
+                        default_val_keys = [item['cognos_expression'] for item in current_config.get('values', [])]
                     else:
-                        default_rows = [format_item(item) for item in current_config.get('rows', [])]
-                        default_cols = [format_item(item) for item in current_config.get('columns', [])]
-                        default_vals = [format_item(item) for item in current_config.get('values', [])]
+                        # Default to all available rows, and no columns/values
+                        default_row_keys = row_options_keys
+                        default_col_keys = []
+                        default_val_keys = []
+
+                    # 6. Create the multiselect widgets
+                    st.multiselect("Matrix Rows", options=row_options_keys, default=default_row_keys, format_func=format_multiselect_option, key=f"{visual_key}_rows")
+                    st.multiselect("Matrix Columns", options=col_val_options_keys, default=default_col_keys, format_func=format_multiselect_option, key=f"{visual_key}_cols")
+                    st.multiselect("Matrix Values", options=col_val_options_keys, default=default_val_keys, format_func=format_multiselect_option, key=f"{visual_key}_vals")
 
 
-                    st.multiselect("Matrix Rows", options=row_options, default=default_rows, key=f"{visual_key}_rows")
-                    st.multiselect("Matrix Columns", options=col_val_options, default=default_cols, key=f"{visual_key}_cols")
-                    st.multiselect("Matrix Values", options=col_val_options, default=default_vals, key=f"{visual_key}_vals")
+                elif visual.get('visual_type') == 'table':
+                    # --- REFACTORED LOGIC FOR TABLES ---
+                    # 1. Create a list of resolved field objects. This preserves order and duplicates.
+                    resolved_fields = []
+                    for item in visual.get('columns', []):
+                        cognos_expr = item.get('expression')
+                        if cognos_expr and cognos_expr in ambiguity_choices:
+                            pbi_string = ambiguity_choices[cognos_expr]
+                            if pbi_string:
+                                table, column = parse_pbi_string(pbi_string)
+                                if table:
+                                    pbi_type = 'Measure' if item.get('type').lower() == 'measure' else 'Column'
+                                    detail = {
+                                        "cognos_expression": cognos_expr, # Keep track of the origin
+                                        "seq": item.get('seq', 999),
+                                        "pbi_expression": f"'{table}'[{column}]",
+                                        "table": table,
+                                        "column": column,
+                                        "type": pbi_type
+                                    }
+                                    if pbi_type == 'Measure':
+                                        detail['aggregation'] = item.get('aggregation')
+                                    resolved_fields.append(detail)
+
+                    # Sort the fields based on the original Cognos sequence number
+                    resolved_fields.sort(key=lambda x: x.get('seq', 999))
+
+                    # 2. Create a lookup from the unique key (cognos_expr) to the detail object
+                    field_lookup = {field['cognos_expression']: field for field in resolved_fields}
+
+                    # 3. The `options` for the multiselect are the unique cognos_expressions
+                    options_keys = [field['cognos_expression'] for field in resolved_fields]
+
+                    # 4. The format function displays the PBI string to the user
+                    def format_multiselect_option(cognos_expr_key):
+                        return field_lookup.get(cognos_expr_key, {}).get('pbi_expression', 'Unknown')
+
+                    # Save the new lookup for the save function to use
+                    st.session_state.temp_visual_lookups[visual_key] = {
+                        "field_lookup": field_lookup,
+                        "original_visual_data": visual
+                    }
+
+                    # 5. Determine default selections
+                    current_config = st.session_state.visual_configs.get(visual_key, {})
+                    
+                    saved_cognos_exprs = []
+                    if current_config:
+                        # A saved item might not have the cognos_expression if it's from an old format
+                        saved_cognos_exprs = [item['cognos_expression'] for item in current_config.get('columns', []) if 'cognos_expression' in item]
+
+                    is_config_valid = current_config and all(expr in options_keys for expr in saved_cognos_exprs)
+
+                    if is_config_valid:
+                        default_keys = saved_cognos_exprs
+                    else:
+                        default_keys = options_keys
+
+                    # 6. Create the multiselect widget
+                    st.multiselect(
+                        "Table Columns",
+                        options=options_keys,
+                        default=default_keys,
+                        format_func=format_multiselect_option,
+                        key=f"{visual_key}_table_cols"
+                    )
                     
                 else:
                     st.info(f"Visual type '{visual.get('visual_type')}' will be implemented later.")
