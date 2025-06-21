@@ -251,7 +251,7 @@ def extract_cognos_report_info(xml_data):
 
 if __name__ == "__main__":
     # Use the path to your report.xml file
-    report_xml_path = r'../../data/matrix_val.xml'
+    report_xml_path = r'../../data/2_page.xml'
     
     xml_content = None
     if not os.path.exists(report_xml_path):

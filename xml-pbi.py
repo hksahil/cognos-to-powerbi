@@ -108,16 +108,19 @@ def main():
                     st.warning("Please save a visual configuration before generating DAX.")
                 else:
                     tasks_to_process = {}
-                    for visual_key, visual_config in st.session_state.visual_configs.items():
-                        for field_type in ['rows', 'columns', 'values']:
-                            for item in visual_config.get(field_type, []):
-                                if item.get('type').lower() == 'measure' and item.get('pbi_expression') and item.get('aggregation'):
-                                    unique_key = f"{visual_key}_{item['pbi_expression']}"
-                                    if unique_key not in tasks_to_process:
-                                        tasks_to_process[unique_key] = {
-                                            "pbi_expression": item['pbi_expression'],
-                                            "aggregation": item['aggregation']
-                                        }
+                    # Iterate through the new hierarchical structure
+                    for page_name, page_data in st.session_state.visual_configs.items():
+                        for visual_config in page_data.get('visuals', []):
+                            for field_type in ['rows', 'columns', 'values']:
+                                for item in visual_config.get(field_type, []):
+                                    if item.get('type').lower() == 'measure' and item.get('pbi_expression') and item.get('aggregation'):
+                                        # Use the PBI expression as the unique key to avoid duplicate DAX generation
+                                        unique_key = item['pbi_expression']
+                                        if unique_key not in tasks_to_process:
+                                            tasks_to_process[unique_key] = {
+                                                "pbi_expression": item['pbi_expression'],
+                                                "aggregation": item['aggregation']
+                                            }
                     
                     items_to_process = list(tasks_to_process.items())
                     if not items_to_process:
@@ -131,18 +134,20 @@ def main():
                                 ai_results_cache[unique_key] = ai_results
                         
                         config_updated = False
-                        for visual_key, visual_config in st.session_state.visual_configs.items():
-                            for field_type in ['rows', 'columns', 'values']:
-                                for item in visual_config.get(field_type, []):
-                                    if item.get('type').lower() == 'measure':
-                                        lookup_key = f"{visual_key}_{item['pbi_expression']}"
-                                        if lookup_key in ai_results_cache:
-                                            ai_output = ai_results_cache[lookup_key]
-                                            generated_dax = ai_output.get('measure')
-                                            if generated_dax and not generated_dax.startswith("Error"):
-                                                item['ai_generated_dax'] = generated_dax
-                                                item['ai_data_type'] = ai_output.get('dataType', 'text')
-                                                config_updated = True
+                        # Update the config with generated DAX by iterating through the new structure
+                        for page_name, page_data in st.session_state.visual_configs.items():
+                            for visual_config in page_data.get('visuals', []):
+                                for field_type in ['rows', 'columns', 'values']:
+                                    for item in visual_config.get(field_type, []):
+                                        if item.get('type').lower() == 'measure':
+                                            lookup_key = item['pbi_expression']
+                                            if lookup_key in ai_results_cache:
+                                                ai_output = ai_results_cache[lookup_key]
+                                                generated_dax = ai_output.get('measure')
+                                                if generated_dax and not generated_dax.startswith("Error"):
+                                                    item['ai_generated_dax'] = generated_dax
+                                                    item['ai_data_type'] = ai_output.get('dataType', 'text')
+                                                    config_updated = True
                         
                         st.session_state.measure_ai_dax_results = ai_results_cache
                         st.success("✅ AI DAX generation complete. Configuration has been updated.")

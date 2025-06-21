@@ -116,68 +116,88 @@ def resolve_ambiguities(pbi_data):
     st.session_state.ambiguity_choices = choices
 
 def save_visual_configuration():
-    """Reads the current state of the UI widgets and saves it to st.session_state.visual_configs."""
+    """
+    Saves the user's visual configuration choices from the UI into st.session_state.visual_configs.
+    The structure is hierarchical: a dictionary of pages, keyed by page name.
+    """
     if 'temp_visual_lookups' not in st.session_state:
-        st.warning("Cannot save, configuration UI has not been generated yet.")
+        st.warning("Cannot save, no configuration has been performed.")
         return
 
-    new_configs = {}
-    for visual_key, lookups in st.session_state.temp_visual_lookups.items():
-        original_visual = lookups['original_visual_data']
-        visual_type = original_visual.get('visual_type')
+    mapped_data = st.session_state.get('mapped_data', {})
+    if not mapped_data:
+        st.error("Original mapped data not found in session state.")
+        return
 
-        visual_config_data = {
-            "visual_name": original_visual.get('visual_name'),
-            "visual_type": visual_type,
-            "rows": [],
-            "columns": [],
-            "values": []
-        }
+    new_config = {}  # The final configuration will be a dictionary of pages
 
-        if visual_type == 'crosstab':
-            # Get selected cognos_expression keys from multiselects
-            selected_row_keys = st.session_state.get(f"{visual_key}_rows", [])
-            selected_col_keys = st.session_state.get(f"{visual_key}_cols", [])
-            selected_val_keys = st.session_state.get(f"{visual_key}_vals", [])
+    for p_idx, page_data in enumerate(mapped_data.get('pages', [])):
+        page_name = page_data.get('page_name', f"Page {p_idx + 1}")
+        page_visuals = []  # A temporary list to hold visuals for the current page
+
+        for v_idx, visual_data in enumerate(page_data.get('visuals', [])):
+            visual_key = f"p{p_idx}_v{v_idx}"
+            lookups = st.session_state.temp_visual_lookups.get(visual_key)
+
+            if not lookups:
+                continue  # Skip visuals that weren't configured
 
             field_lookup = lookups.get('field_lookup', {})
+            original_visual = lookups['original_visual_data']
+            visual_type = original_visual.get('visual_type')
+            
+            new_visual_config = {
+                "visual_name": original_visual.get('visual_name', 'Unnamed Visual'),
+                "visual_type": 'matrix' if visual_type == 'crosstab' else visual_type,
+                "rows": [], "columns": [], "values": [], "filters": []
+            }
 
-            # Rebuild full detail objects from the selected keys
-            visual_config_data["rows"] = [field_lookup.get(key) for key in selected_row_keys if key in field_lookup]
-            visual_config_data["columns"] = [field_lookup.get(key) for key in selected_col_keys if key in field_lookup]
-            visual_config_data["values"] = [field_lookup.get(key) for key in selected_val_keys if key in field_lookup]
-        
-        elif visual_type == 'table':
-            # FIX: Use the new 'field_lookup' structure for tables
-            # We get back a list of selected cognos_expressions (keys)
-            selected_keys = st.session_state.get(f"{visual_key}_table_cols", [])
-            field_lookup = lookups.get('field_lookup', {})
-            # Rebuild the full detail objects from the selected keys
-            visual_config_data["columns"] = [field_lookup.get(key) for key in selected_keys if key in field_lookup]
-        # Re-process filters
+            # Process roles based on visual type
+            if visual_type == 'crosstab':
+                role_map = {'rows': 'rows', 'cols': 'columns', 'vals': 'values'}
+                for role_key, config_key in role_map.items():
+                    selected_exprs = st.session_state.get(f"{visual_key}_{role_key}", [])
+                    for expr in selected_exprs:
+                        if expr in field_lookup:
+                            new_visual_config[config_key].append(field_lookup[expr])
+            elif visual_type == 'table':
+                selected_exprs = st.session_state.get(f"{visual_key}_table_cols", [])
+                for expr in selected_exprs:
+                    if expr in field_lookup:
+                        # For PBI tables, all fields can be considered 'values'
+                        new_visual_config['values'].append(field_lookup[expr])
 
-        resolved_filters = []
-        for f in lookups['original_visual_data'].get('filters', []):
-            cognos_expr = f.get('column') 
-            if cognos_expr and cognos_expr in st.session_state.ambiguity_choices:
-                pbi_string = st.session_state.ambiguity_choices[cognos_expr]
-                if pbi_string:
-                    table, column = parse_pbi_string(pbi_string)
-                    if table:
-                        filter_values = parse_filter_expression(f.get('expression'))
-                        if filter_values:
-                            resolved_filters.append({
-                                "pbi_expression": f"'{table}'[{column}]", "table": table, "column": column,
-                                "type": "Column", "filter_type": "Categorical", "values": filter_values
-                            })
-        visual_config_data['filters'] = resolved_filters
-        
-        new_configs[visual_key] = visual_config_data
-    
-    st.session_state.visual_configs = new_configs
+            # Re-process and resolve filters
+            resolved_filters = []
+            print(original_visual.get('filters', []))
+            for f in original_visual.get('filters', []):
+                cognos_expr = f.get('column')
+                if cognos_expr and cognos_expr in st.session_state.ambiguity_choices:
+                    pbi_string = st.session_state.ambiguity_choices[cognos_expr]
+                    if pbi_string:
+                        table, column = parse_pbi_string(pbi_string)
+                        if table:
+                            filter_values = parse_filter_expression(f.get('expression'))
+                            if filter_values:
+                                resolved_filters.append({
+                                    "pbi_expression": f"'{table}'[{column}]", "table": table, "column": column,
+                                    "type": "Column", "filter_type": "Categorical", "values": filter_values
+                                })
+            new_visual_config['filters'] = resolved_filters
+            
+            page_visuals.append(new_visual_config)
+
+        if page_visuals:  # Only add pages that have visuals
+            new_config[page_name] = {
+                "name": page_name,
+                "visuals": page_visuals
+            }
+
+    st.session_state.visual_configs = new_config
     st.success("✅ Visual configuration saved!")
     st.rerun()
-    
+
+
 def configure_visuals(mapped_data, ambiguity_choices):
     """Creates a UI for configuring Power BI visuals and their filters."""
     st.markdown("---")
