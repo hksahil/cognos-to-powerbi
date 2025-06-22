@@ -32,7 +32,7 @@ def display_structured_data(data, ambiguity_choices):
                     is_mapped = bool(ambiguity_choices.get(cognos_expr))
                     
                     # Condition 2: Check for valid filter operator ('in' or '=')
-                    is_valid_filter_expr = (' in ' in filter_expression.lower() or '=' in filter_expression)
+                    is_valid_filter_expr = ((' in ' in filter_expression.lower() or '=' in filter_expression) and '?' not in filter_expression)
 
                     # Final status check
                     status = "✅" if is_mapped and is_valid_filter_expr else "❌"
@@ -222,7 +222,7 @@ def configure_visuals(mapped_data, ambiguity_choices):
     st.markdown("---")
     st.header("Step 4: Configure Visuals")
 
-    
+
     if 'visual_configs' not in st.session_state:
         st.session_state.visual_configs = {}
     

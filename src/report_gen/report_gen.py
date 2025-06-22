@@ -31,8 +31,10 @@ def report_generator(config, local_settings_template, theme_template, semantic_l
     # --- 2. Handle Image Resources (logic remains the same, but saves to dictionary) ---
     image_resources = []
     registered_image_name = None
-    source_image_path = Path('../../assets/Goodyear_Tire_and_Rubber_Compa15066536882930803.png')  # Example path
+    source_image_path = Path('assets/Goodyear_Tire_and_Rubber_Compa15066536882930803.png')  # Example path
+    print(f"Source image path: {source_image_path}")
 
+    
     if source_image_path.exists():
         target_image_dir = report_folder_path / 'StaticResources' / 'RegisteredResources'
 
