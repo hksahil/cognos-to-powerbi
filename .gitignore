@@ -9,4 +9,5 @@ data/tab-sql.json
 data/report.xml
 **/__pycache__/
 .env
-/data
+data
+/test
