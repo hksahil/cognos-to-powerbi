@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from src.xml_pbi.utils import parse_pbi_string, parse_filter_expression
 
-def display_structured_data(data):
+def display_structured_data(data, ambiguity_choices):
     """Displays the extracted report data in a structured, user-friendly format."""
     st.header("Step 1: Cognos Report Analysis")
     st.subheader(f"Report Name: {data.get('report_name', 'N/A')}")
@@ -15,28 +15,41 @@ def display_structured_data(data):
                 st.caption(f"Type: `{visual.get('visual_type')}` | Query Reference: `{visual.get('query_ref')}`")
 
                 all_fields = []
-                for item in visual.get('rows', []):
-                    item['role'] = 'Row'
-                    all_fields.append(item)
-                for item in visual.get('columns', []):
-                    item['role'] = 'Column'
-                    all_fields.append(item)
-                for item in visual.get('values', []):
-                    item['role'] = 'Value'
-                    all_fields.append(item)
+                role_map = {'rows': 'Row', 'columns': 'Column', 'values': 'Value'}
+                for role_key, role_name in role_map.items():
+                    for item in visual.get(role_key, []):
+                        cognos_expr = item.get('expression')
+                        is_included = bool(ambiguity_choices.get(cognos_expr))
+                        item['status'] = "✅" if is_included else "❌"
+                        item['role'] = role_name
+                        all_fields.append(item)
+
                 for f in visual.get('filters', []):
+                    cognos_expr = f.get('column')
+                    filter_expression = f.get('expression', '')
+
+                    # Condition 1: Check for valid mapping
+                    is_mapped = bool(ambiguity_choices.get(cognos_expr))
+                    
+                    # Condition 2: Check for valid filter operator ('in' or '=')
+                    is_valid_filter_expr = (' in ' in filter_expression.lower() or '=' in filter_expression)
+
+                    # Final status check
+                    status = "✅" if is_mapped and is_valid_filter_expr else "❌"
+                    
                     filter_field = {
+                        'status': status,
                         'role': 'Filter', 'name': f.get('column', 'N/A'), 'type': None,
                         'aggregation': None, 'pbi_mapping': f.get('pbi_mapping', 'N/A'),
-                        'expression': f.get('expression')
+                        'expression': filter_expression
                     }
                     all_fields.append(filter_field)
 
                 if all_fields:
                     df = pd.DataFrame(all_fields)
                     df.fillna({'type': '-', 'aggregation': '-'}, inplace=True)
-                    df_display = df[['role', 'name', 'type', 'aggregation', 'pbi_mapping', 'expression']]
-                    df_display.columns = ['Role', 'Name', 'Type', 'Aggregation', 'Power BI Mapping', 'Cognos Expression']
+                    df_display = df[['status', 'role', 'name', 'type', 'aggregation', 'pbi_mapping', 'expression']]
+                    df_display.columns = ['Status', 'Role', 'Name', 'Type', 'Aggregation', 'Power BI Mapping', 'Cognos Expression']
                     st.dataframe(df_display)
 
 def display_pbi_mappings(pbi_data):
@@ -172,6 +185,12 @@ def save_visual_configuration():
             # print(original_visual.get('filters', []))
             for f in original_visual.get('filters', []):
                 cognos_expr = f.get('column')
+                filter_expression = f.get('expression', '')
+
+                                # Skip filters that contain a '?', as they are likely unresolved prompts
+                if '?' in filter_expression:
+                    continue
+
                 if cognos_expr and cognos_expr in st.session_state.ambiguity_choices:
                     pbi_string = st.session_state.ambiguity_choices[cognos_expr]
                     if pbi_string:
@@ -203,6 +222,7 @@ def configure_visuals(mapped_data, ambiguity_choices):
     st.markdown("---")
     st.header("Step 4: Configure Visuals")
 
+    
     if 'visual_configs' not in st.session_state:
         st.session_state.visual_configs = {}
     

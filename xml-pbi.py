@@ -81,7 +81,7 @@ def main():
     if st.session_state.mapped_data:
         tab1, tab2 = st.tabs(["Analysis and Configuration", "Raw JSON"])
         with tab1:
-            display_structured_data(st.session_state.mapped_data)
+            display_structured_data(st.session_state.mapped_data, st.session_state.get('ambiguity_choices', {}))
 
         with tab2:
             st.json(st.session_state.mapped_data)
