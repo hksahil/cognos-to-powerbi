@@ -6,7 +6,7 @@ from src.xml_pbi.dax import generate_dax_for_measure
 from dotenv import load_dotenv
 
 from src.xml_pbi.utils import load_all_mappings
-from src.xml_pbi.mapping import map_cognos_to_db, find_pbi_mappings
+from src.xml_pbi.mapping import map_cognos_to_pbi, find_direct_pbi_mappings
 from src.xml_pbi.ui import (
     display_structured_data,
     display_pbi_mappings,
@@ -62,11 +62,11 @@ def main():
                 else:
                     all_mappings = load_all_mappings('data/column_mappings.json')
                     if all_mappings:
-                        cognos_to_db_map = all_mappings.get("mappings", {}).get("cognos_to_db", {})
-                        st.session_state.mapped_data = map_cognos_to_db(report_data, cognos_to_db_map)
+                        # Switch to direct Cognos to Power BI mapping
+                        cognos_to_pbi_map = all_mappings.get("mappings", {}).get("cognos_to_powerbi", {})
+                        st.session_state.mapped_data = map_cognos_to_pbi(report_data, cognos_to_pbi_map)
                         
-                        db_to_pbi_map = all_mappings.get("mappings", {}).get("db_to_powerbi", {})
-                        st.session_state.pbi_mappings = find_pbi_mappings(st.session_state.mapped_data, db_to_pbi_map)
+                        st.session_state.pbi_mappings = find_direct_pbi_mappings(report_data, cognos_to_pbi_map)
                         st.success("✅ Analysis and mapping complete.")
                     else:
                         st.session_state.mapped_data = None

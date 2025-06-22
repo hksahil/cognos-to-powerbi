@@ -27,7 +27,7 @@ def display_structured_data(data):
                 for f in visual.get('filters', []):
                     filter_field = {
                         'role': 'Filter', 'name': f.get('column', 'N/A'), 'type': None,
-                        'aggregation': None, 'db_mapping': f.get('db_mapping', 'N/A'),
+                        'aggregation': None, 'pbi_mapping': f.get('pbi_mapping', 'N/A'),
                         'expression': f.get('expression')
                     }
                     all_fields.append(filter_field)
@@ -35,8 +35,8 @@ def display_structured_data(data):
                 if all_fields:
                     df = pd.DataFrame(all_fields)
                     df.fillna({'type': '-', 'aggregation': '-'}, inplace=True)
-                    df_display = df[['role', 'name', 'type', 'aggregation', 'db_mapping', 'expression']]
-                    df_display.columns = ['Role', 'Name', 'Type', 'Aggregation', 'DB Mapping', 'Cognos Expression']
+                    df_display = df[['role', 'name', 'type', 'aggregation', 'pbi_mapping', 'expression']]
+                    df_display.columns = ['Role', 'Name', 'Type', 'Aggregation', 'Power BI Mapping', 'Cognos Expression']
                     st.dataframe(df_display)
 
 def display_pbi_mappings(pbi_data):
