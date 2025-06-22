@@ -4,9 +4,6 @@
 /.venv
 /.vscode
 /dump
-data/column_mappings.json
-data/tab-sql.json
-data/report.xml
 **/__pycache__/
 .env
 /test
