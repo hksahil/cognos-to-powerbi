@@ -1,0 +1,425 @@
+{
+  "version": "1.1.0",
+  "diagrams": [
+    {
+      "ordinal": 0,
+      "scrollPosition": {
+        "x": 0,
+        "y": 0
+      },
+      "nodes": [
+        {
+          "location": {
+            "x": 1883.6595307111652,
+            "y": 1874.7138672815918
+          },
+          "nodeIndex": "Brand",
+          "nodeLineageTag": "f943dd62-54e7-4243-a62e-1c90f8dcbb3a",
+          "size": {
+            "height": 296,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 1793.1130690812147,
+            "y": 559.53148263849789
+          },
+          "nodeIndex": "CBU",
+          "nodeLineageTag": "5a29892b-0249-445f-a9fe-f7bac215a1c1",
+          "size": {
+            "height": 176,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 50,
+            "y": 1065.142170620398
+          },
+          "nodeIndex": "COB",
+          "nodeLineageTag": "71c679c3-b40e-47f7-b022-7b3081a55d83",
+          "size": {
+            "height": 248,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 243.2856157028441,
+            "y": 708.45825226799138
+          },
+          "nodeIndex": "Country",
+          "nodeLineageTag": "ff147fd1-c00c-4574-a449-b5457392ffe1",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 738.07724259716133,
+            "y": 1402.7845040352056
+          },
+          "nodeIndex": "Current Month Working Day",
+          "nodeLineageTag": "fe8f3b47-3049-4daf-b58d-aed234747b35",
+          "size": {
+            "height": 176,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 2643.2156690229963,
+            "y": 1435.0242083874757
+          },
+          "nodeIndex": "Date Refresh Table",
+          "nodeLineageTag": "b722cd13-12a0-4e5d-85ff-fbd8cdb179c2",
+          "size": {
+            "height": 104,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 2409.2156690229963,
+            "y": 1498.877818585614
+          },
+          "nodeIndex": "Distribution Channel",
+          "nodeLineageTag": "99e0290c-c343-4d6c-9865-f725b8bf25b9",
+          "size": {
+            "height": 152,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 819.95171677895678,
+            "y": 306.63206322224278
+          },
+          "nodeIndex": "Management Price",
+          "nodeLineageTag": "2d73300d-c469-4147-8c32-0edc4af70d4c",
+          "size": {
+            "height": 248,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 729.16668374729443,
+            "y": 2428.5805835746523
+          },
+          "nodeIndex": "Material",
+          "nodeLineageTag": "f953a932-ef1d-420f-87bf-cc13dd2b9815",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 2927.2156690229963,
+            "y": 1351.0242083874757
+          },
+          "nodeIndex": "Material Change Count",
+          "nodeLineageTag": "a3766e2a-ce5b-4352-a418-7c2ec16af9da",
+          "size": {
+            "height": 272,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 3211.2156690229963,
+            "y": 1351.0242083874757
+          },
+          "nodeIndex": "Material Local",
+          "nodeLineageTag": "58b5fa51-9897-49cd-b279-931e5437636a",
+          "size": {
+            "height": 272,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 1544.3070676313973,
+            "y": 1504.7298732169668
+          },
+          "nodeIndex": "OEM Car Platform",
+          "nodeLineageTag": "c2c1b60b-1793-42f5-9544-ce44a4e62a5b",
+          "size": {
+            "height": 200,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 1255.9565276091139,
+            "y": 1277.955113478783
+          },
+          "nodeIndex": "Order To Cash (OTC)",
+          "nodeLineageTag": "5529df5f-c4d8-4ac5-9831-438fffa639b4",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 884.13357461125065,
+            "y": -50
+          },
+          "nodeIndex": "Payer Customer (Account Planning)",
+          "nodeLineageTag": "75c72aec-07bf-4976-ae39-075e1ce313a0",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 1018.7709716442578,
+            "y": 2266.9102477084425
+          },
+          "nodeIndex": "Payer Customer (Details)",
+          "nodeLineageTag": "f89a5b17-e999-4060-abd3-bf85e108d696",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 2170.767287378063,
+            "y": 1857.8605728948673
+          },
+          "nodeIndex": "Payer Customer (Hierarchy)",
+          "nodeLineageTag": "bd54c398-1a6f-43dd-9a3e-ec91bba6d108",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 449.015852734025,
+            "y": 1246.1266101399981
+          },
+          "nodeIndex": "Payer Customer Commercial Group",
+          "nodeLineageTag": "3168a57a-0460-406d-92a9-d61fea4ca26e",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 967.756879200866,
+            "y": 967.442228558039
+          },
+          "nodeIndex": "Payer Customer MOTO Group",
+          "nodeLineageTag": "881004da-4f90-48b9-ae9a-6edb61c98cce",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 2148.2984485651887,
+            "y": 1143.8599071113135
+          },
+          "nodeIndex": "Payer Selling Responsible",
+          "nodeLineageTag": "9c630511-156d-43e2-8542-dcf002c39856",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 448.1936736381208,
+            "y": 1624.5792266465928
+          },
+          "nodeIndex": "Payer To Customer (Sales Org)",
+          "nodeLineageTag": "8a069dff-829a-4dae-8049-68c93e5b9614",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 1832.6000190861764,
+            "y": 1549.5426284921159
+          },
+          "nodeIndex": "Product Aggregation Key (PAK)",
+          "nodeLineageTag": "a55c0714-ae45-4913-989a-15bb9814ac3a",
+          "size": {
+            "height": 272,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 160.10613634257516,
+            "y": 1366.6506928784181
+          },
+          "nodeIndex": "Sales Organization",
+          "nodeLineageTag": "0237f387-b2a7-4ab8-a6a3-e72737aaeecb",
+          "size": {
+            "height": 200,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 950.75066007166151,
+            "y": 610.28521965862819
+          },
+          "nodeIndex": "Selling Responsible",
+          "nodeLineageTag": "30b9e0eb-1b15-4769-b8a9-1a3caceffeb6",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 1041.2071500206016,
+            "y": 1911.731537803121
+          },
+          "nodeIndex": "Ship To Customer (Details)",
+          "nodeLineageTag": "9912acb3-0a90-41b0-baa8-082a05514e95",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 1029.4785331808018,
+            "y": 2624.0484167749514
+          },
+          "nodeIndex": "Ship To Customer (Hierarchy)",
+          "nodeLineageTag": "e581ff34-35f9-4ba5-b1e8-93f124d31a08",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 2120.6049686386323,
+            "y": 1500.6143497611965
+          },
+          "nodeIndex": "Sold To Customer (Details)",
+          "nodeLineageTag": "92ee8f8c-375a-45c0-a63a-2c68ee340af4",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 531.5388950427423,
+            "y": 351.2833978991107
+          },
+          "nodeIndex": "Sold To Customer (Hierarchy)",
+          "nodeLineageTag": "1115f005-13e0-41a8-945d-42a1f23fa483",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 3495.2156690229963,
+            "y": 1337.0242083874757
+          },
+          "nodeIndex": "Sold To Customer (Sales Org)",
+          "nodeLineageTag": "fbf614bb-addc-4557-9226-0b419a089a3b",
+          "size": {
+            "height": 300,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 1875.1689147270404,
+            "y": 790.72421191870353
+          },
+          "nodeIndex": "Sourcing",
+          "nodeLineageTag": "1043e2d6-ef7f-4263-bc83-e8eb7c95d68f",
+          "size": {
+            "height": 296,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 1060.9492672785902,
+            "y": 1633.1379917138383
+          },
+          "nodeIndex": "SPU",
+          "nodeLineageTag": "f96fb7b4-5bcd-4be4-87f7-04baa33f498c",
+          "size": {
+            "height": 224,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 1878.127015350246,
+            "y": 2226.5075191839132
+          },
+          "nodeIndex": "Time Periods",
+          "nodeLineageTag": "ec130dc2-d9c0-443e-a2bc-548e83c2938c",
+          "size": {
+            "height": 224,
+            "width": 234
+          },
+          "zIndex": 0
+        }
+      ],
+      "name": "All tables",
+      "zoomValue": 100,
+      "pinKeyFieldsToTop": false,
+      "showExtraHeaderInfo": false,
+      "hideKeyFieldsWhenCollapsed": false,
+      "tablesLocked": false
+    }
+  ],
+  "selectedDiagram": "All tables",
+  "defaultDiagram": "All tables"
+}
