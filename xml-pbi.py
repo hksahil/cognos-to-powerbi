@@ -9,7 +9,6 @@ from src.xml_pbi.utils import load_all_mappings
 from src.xml_pbi.mapping import map_cognos_to_pbi, find_direct_pbi_mappings
 from src.xml_pbi.ui import (
     display_structured_data,
-    display_pbi_mappings,
     resolve_ambiguities,
     configure_visuals,
     save_visual_configuration
@@ -21,7 +20,7 @@ load_dotenv(dotenv_path='.env')
 
 def main():
     """Main function to run the Streamlit application."""
-    st.set_page_config(layout="wide")
+    st.set_page_config(layout="wide", page_title="Cognos to Power BI")
     st.title("Cognos to Power BI Report Generator")
     st.write("Paste your Cognos `report.xml` content below to start the report generation process.")
 
