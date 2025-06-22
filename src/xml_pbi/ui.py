@@ -169,7 +169,7 @@ def save_visual_configuration():
 
             # Re-process and resolve filters
             resolved_filters = []
-            print(original_visual.get('filters', []))
+            # print(original_visual.get('filters', []))
             for f in original_visual.get('filters', []):
                 cognos_expr = f.get('column')
                 if cognos_expr and cognos_expr in st.session_state.ambiguity_choices:

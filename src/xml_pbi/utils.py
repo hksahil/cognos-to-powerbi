@@ -17,7 +17,17 @@ class CustomDumper(yaml.Dumper):
 
 CustomDumper.add_representer(FlowDict, CustomDumper.represent_dict)
 
-
+def load_json_file(filepath):
+    """Loads a JSON file from the given path."""
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        st.error(f"File not found: {filepath}")
+        return None
+    except json.JSONDecodeError:
+        st.error(f"Error decoding JSON from file: {filepath}")
+        return None
 
 def load_all_mappings(filepath="column_mappings.json"):
     """Loads the entire mappings JSON file."""

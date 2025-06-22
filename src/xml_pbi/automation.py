@@ -1,10 +1,12 @@
 import streamlit as st
 import yaml
-from io import StringIO
+import zipfile
+from io import StringIO, BytesIO
 from pathlib import Path
 import subprocess
-from src.xml_pbi.utils import FlowDict, CustomDumper
 
+from src.report_gen.report_gen import report_generator
+from src.xml_pbi.utils import FlowDict, CustomDumper, load_json_file
 
 
 def generate_and_run_pbi_automation():
@@ -124,45 +126,43 @@ def generate_and_run_pbi_automation():
         st.session_state['generated_pbi_config'] = generated_yaml_str.strip()
         st.success("`config.yaml` content generated successfully!")
 
-        # --- 5. Save config locally and run PBI Automation script ---
         app_dir = Path(__file__).parent.parent.parent
-        local_config_path = app_dir / "dump/config.yaml"
-        with open(local_config_path, 'w', encoding='utf-8') as f:
-            f.write(st.session_state['generated_pbi_config'])
-        st.info(f"Generated `config.yaml` saved to: {local_config_path}")
+        config_dir = app_dir / 'config'
+        local_settings_template = load_json_file(config_dir / 'localSettings.json')
+        theme_template = load_json_file(config_dir / 'theme.json')
+        semantic_layout_content = load_json_file(config_dir / 'semantic.json')
 
-        pbi_automation_script_path = Path(r"c:\Users\NileshPhapale\Desktop\PBI Automation\main.py")
-        pbi_automation_project_dir = pbi_automation_script_path.parent
-        python_executable = pbi_automation_project_dir / ".venv" / "Scripts" / "python.exe"
+        if not all([local_settings_template, theme_template, semantic_layout_content]):
+            st.error("Failed to load one or more template files. Aborting report generation.")
+            return
 
-        if pbi_automation_script_path.exists():
-            command = [
-                str(python_executable), 
-                str(pbi_automation_script_path),
-                "--config", 
-                str(local_config_path.resolve())
-            ]
-            st.info(f"Executing command: `{' '.join(command)}`")
-            process = subprocess.Popen(
-                command, 
-                cwd=str(pbi_automation_project_dir),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                encoding='utf-8'
-            )
-            stdout, stderr = process.communicate(timeout=300)
-            if process.returncode == 0:
-                st.success("PBI Automation script executed successfully!")
-                if stdout: st.text_area("Script Output:", value=stdout, height=200)
-                if stderr: st.text_area("Script Warnings:", value=stderr, height=100)
-            else:
-                st.error(f"PBI Automation script failed with code {process.returncode}.")
-                if stdout: st.text_area("Script Output:", value=stdout, height=150)
-                if stderr: st.text_area("Script Error Output:", value=stderr, height=150)
-        else:
-            st.warning(f"PBI Automation script not found at: {pbi_automation_script_path}. Skipping execution.")
+        # --- 5. Call Report Generator to get file contents ---
+        st.info("Generating report files in memory...")
+        files_to_create = report_generator(
+            config=config,
+            local_settings_template=local_settings_template,
+            theme_template=theme_template,
+            semantic_layout_content=semantic_layout_content
+        )
+
+        # --- 6. Create a ZIP archive in memory ---
+        st.info("Creating ZIP archive...")
+        zip_buffer = BytesIO()
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            for file_path_str, content in files_to_create.items():
+                path_parts = Path(file_path_str).parts
+                try:
+                    dump_index = path_parts.index('dump')
+                    archive_path = Path(*path_parts[dump_index + 1:])
+                    zip_file.writestr(str(archive_path), content)
+                except ValueError:
+                    st.warning(f"Could not determine archive path for {file_path_str}. Skipping.")
+        
+        zip_buffer.seek(0)
+        st.session_state['generated_report_zip'] = zip_buffer.getvalue()
+        st.session_state['report_zip_filename'] = f"{config.get('projectName', 'report')}.zip"
+        st.success("✅ Report ZIP archive is ready for download.")
 
     except Exception as e:
-        st.error(f"An unexpected error occurred during config generation or script execution: {e}")
+        st.error(f"An unexpected error occurred during report generation: {e}")
         st.exception(e)

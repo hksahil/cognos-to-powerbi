@@ -162,26 +162,29 @@ def main():
                     with st.expander(f"DAX for: `{input_expr}`"):
                         st.code(dax_measure, language='dax')
             # --- Step 5: Generate Report ---
-
             if st.session_state.get('visual_configs'):
                 st.markdown("---")
                 st.header("Step 5: Generate Power BI Report")
                 if st.button("Generate Report", type="primary"):
                     generate_and_run_pbi_automation()
                 
-                if st.session_state.get('generated_pbi_config'):
-                    st.subheader("Generated `config.yaml` Content")
-                    st.code(st.session_state['generated_pbi_config'], language="yaml")
+                if st.session_state.get('generated_report_zip'):
                     st.download_button(
-                        label="Download config.yaml",
-                        data=st.session_state['generated_pbi_config'],
-                        file_name="config.yaml",
-                        mime="text/yaml"
+                        label="Download Report ZIP",
+                        data=st.session_state['generated_report_zip'],
+                        file_name=st.session_state.get('report_zip_filename', 'report.zip'),
+                        mime="application/zip"
                     )
+
+                if st.session_state.get('generated_pbi_config'):
+                    with st.expander("View Generated `config.yaml` Content (for reference)"):
+                        st.code(st.session_state['generated_pbi_config'], language="yaml")
             
             # --- (For Debugging) Final Configuration ---
             st.markdown("---")
             with st.expander("Show Current Visual Configuration (for debugging)"):
                 st.json(st.session_state.get('visual_configs', {}))
+
+
 if __name__ == "__main__":
     main()
