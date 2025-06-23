@@ -17,6 +17,16 @@ from src.xml_pbi.automation import generate_and_run_pbi_automation
 
 load_dotenv(dotenv_path='.env')
 
+# CSS
+hide_st_style = """
+            <style>
+            #MainMenu {visibility: hidden;}
+            footer {visibility: hidden;}
+            header {visibility: hidden;}
+            </style>
+            """
+st.markdown(hide_st_style, unsafe_allow_html=True)
+
 
 def main():
     """Main function to run the Streamlit application."""
